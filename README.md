@@ -114,7 +114,7 @@ coval/
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/your-username/coval.git
+git clone https://github.com/vaishnav-reddy/COVAL-TenzorX.git
 cd coval
 ```
 
