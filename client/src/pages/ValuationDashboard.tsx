@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
   TrendingUp, AlertTriangle, Droplets, Shield, Download, RefreshCw, FileText,
-  Clock, CheckCircle, ChevronRight, ArrowUpRight, ArrowDownRight, Minus, Info
+  Clock, CheckCircle, ChevronRight, ArrowUpRight, ArrowDownRight, Info
 } from 'lucide-react';
 import { getValuation } from '../utils/api';
 import { Card } from '../components/ui/Card';
@@ -17,30 +17,30 @@ function ValueRangeCard({ data }: { data: ValuationResult }) {
     <Card glowing className="col-span-full">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs text-slate-400 mb-1 uppercase tracking-widest">AI-Assessed Market Value Range</p>
+          <p className="text-xs text-gray-500 mb-1 uppercase tracking-widest">AI-Assessed Market Value Range</p>
           <div className="flex items-end gap-3 flex-wrap">
             <motion.div
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.8, ease: 'easeOut' }}
-              className="text-4xl font-extrabold text-white"
+              className="text-4xl font-extrabold text-gray-900"
             >
               {formatCurrencyShort(data.valueRangeLow)}
             </motion.div>
-            <span className="text-2xl text-slate-400 mb-1">—</span>
+            <span className="text-2xl text-gray-400 mb-1">—</span>
             <motion.div
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.8, delay: 0.2, ease: 'easeOut' }}
-              className="text-4xl font-extrabold text-[#4db8ff]"
+              className="text-4xl font-extrabold text-indigo-600"
             >
               {formatCurrencyShort(data.valueRangeHigh)}
             </motion.div>
           </div>
           <div className="flex items-center gap-3 mt-2 flex-wrap">
-            <span className="text-sm text-slate-400">Base: <span className="text-white font-medium">{formatCurrencyShort(data.marketValue)}</span></span>
-            <span className="text-slate-600">|</span>
-            <span className="text-sm text-slate-400">₹{data.pricePerSqft?.toLocaleString('en-IN')}/sqft</span>
+            <span className="text-sm text-gray-500">Base: <span className="text-gray-800 font-medium">{formatCurrencyShort(data.marketValue)}</span></span>
+            <span className="text-gray-300">|</span>
+            <span className="text-sm text-gray-500">₹{data.pricePerSqft?.toLocaleString('en-IN')}/sqft</span>
             {data.overPricedFlag && (
               <Badge variant="critical">
                 <AlertTriangle className="w-3 h-3 mr-1" />
@@ -51,9 +51,9 @@ function ValueRangeCard({ data }: { data: ValuationResult }) {
         </div>
         <div className="flex gap-3">
           <div className="text-right">
-            <p className="text-xs text-slate-500 mb-0.5">Declared Value</p>
-            <p className="text-lg font-bold text-white">{formatCurrencyShort(data.propertySnapshot?.declaredValue || 0)}</p>
-            <p className={`text-xs font-medium ${data.declaredVsMarketDeviation > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+            <p className="text-xs text-gray-400 mb-0.5">Declared Value</p>
+            <p className="text-lg font-bold text-gray-800">{formatCurrencyShort(data.propertySnapshot?.declaredValue || 0)}</p>
+            <p className={`text-xs font-medium ${data.declaredVsMarketDeviation > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
               {data.declaredVsMarketDeviation > 0 ? <ArrowUpRight className="inline w-3 h-3" /> : <ArrowDownRight className="inline w-3 h-3" />}
               {Math.abs(data.declaredVsMarketDeviation)}% vs assessed
             </p>
@@ -69,8 +69,8 @@ function ConfidenceCard({ data }: { data: ValuationResult }) {
   return (
     <Card>
       <div className="flex items-center gap-2 mb-4">
-        <Shield className="w-4 h-4 text-[#1a9eff]" />
-        <span className="text-sm font-semibold text-white">Confidence Score</span>
+        <Shield className="w-4 h-4 text-indigo-500" />
+        <span className="text-sm font-semibold text-gray-800">Confidence Score</span>
       </div>
       <div className="flex flex-col items-center relative mb-4">
         <GaugeChart value={data.confidenceScore} color={color} label="confidence" size={150} />
@@ -78,16 +78,16 @@ function ConfidenceCard({ data }: { data: ValuationResult }) {
       <div className="space-y-2 mt-2">
         {Object.values(data.confidenceBreakdown || {}).map((item) => (
           <div key={item.label} className="flex items-center gap-2">
-            <span className="text-xs text-slate-400 w-36 shrink-0">{item.label}</span>
-            <div className="flex-1 h-1.5 bg-[#1a2d4a] rounded-full overflow-hidden">
+            <span className="text-xs text-gray-500 w-36 shrink-0">{item.label}</span>
+            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
               <motion.div
-                className="h-full bg-[#1a9eff] rounded-full"
+                className="h-full bg-indigo-500 rounded-full"
                 initial={{ width: 0 }}
                 animate={{ width: `${item.score}%` }}
                 transition={{ duration: 1, delay: 0.3 }}
               />
             </div>
-            <span className="text-xs text-white w-8 text-right">{item.score}</span>
+            <span className="text-xs text-gray-700 w-8 text-right">{item.score}</span>
           </div>
         ))}
       </div>
@@ -99,26 +99,24 @@ function DistressCard({ data }: { data: ValuationResult }) {
   return (
     <Card>
       <div className="flex items-center gap-2 mb-4">
-        <TrendingUp className="w-4 h-4 text-amber-400" />
-        <span className="text-sm font-semibold text-white">Distress Value</span>
-        {data.rbiErosionFlag && (
-          <Badge variant="critical" className="ml-auto">RBI Flag</Badge>
-        )}
+        <TrendingUp className="w-4 h-4 text-amber-500" />
+        <span className="text-sm font-semibold text-gray-800">Distress Value</span>
+        {data.rbiErosionFlag && <Badge variant="critical" className="ml-auto">RBI Flag</Badge>}
       </div>
-      <div className="text-3xl font-bold text-amber-400 mb-1">{formatCurrency(data.distressValue)}</div>
-      <p className="text-xs text-slate-400 mb-3">Liquidation multiple: {data.distressMultiplier}x of market value</p>
+      <div className="text-3xl font-bold text-amber-600 mb-1">{formatCurrency(data.distressValue)}</div>
+      <p className="text-xs text-gray-400 mb-3">Liquidation multiple: {data.distressMultiplier}x of market value</p>
       <div className="space-y-2 text-sm">
         <div className="flex justify-between">
-          <span className="text-slate-400">Timeline</span>
-          <span className="text-white font-medium">{data.liquidationTimeline}</span>
+          <span className="text-gray-500">Timeline</span>
+          <span className="text-gray-800 font-medium">{data.liquidationTimeline}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-slate-400">Resale Risk</span>
+          <span className="text-gray-500">Resale Risk</span>
           <Badge variant={data.resaleRisk as 'low' | 'medium' | 'high'}>{data.resaleRisk?.toUpperCase()}</Badge>
         </div>
       </div>
       {data.rbiErosionFlag && (
-        <div className="mt-3 p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400">
+        <div className="mt-3 p-2.5 rounded-lg bg-red-50 border border-red-200 text-xs text-red-600">
           <AlertTriangle className="inline w-3 h-3 mr-1" />
           RBI Significant Erosion: Realizable value below 50% threshold
         </div>
@@ -132,19 +130,19 @@ function LiquidityCard({ data }: { data: ValuationResult }) {
   return (
     <Card>
       <div className="flex items-center gap-2 mb-4">
-        <Droplets className="w-4 h-4 text-[#1a9eff]" />
-        <span className="text-sm font-semibold text-white">Liquidity Score</span>
+        <Droplets className="w-4 h-4 text-indigo-500" />
+        <span className="text-sm font-semibold text-gray-800">Liquidity Score</span>
       </div>
       <div className="flex flex-col items-center relative mb-4">
         <GaugeChart value={data.liquidityScore} color={color} label="/ 100" size={150} />
       </div>
       <div className="space-y-1.5 text-sm">
         <div className="flex justify-between">
-          <span className="text-slate-400">Time to Sell</span>
-          <span className="text-white font-medium">{data.timeToSell}</span>
+          <span className="text-gray-500">Time to Sell</span>
+          <span className="text-gray-800 font-medium">{data.timeToSell}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-slate-400">Exit Certainty</span>
+          <span className="text-gray-500">Exit Certainty</span>
           <Badge variant={data.exitCertainty as 'high' | 'medium' | 'low'}>{data.exitCertainty?.toUpperCase()}</Badge>
         </div>
       </div>
@@ -157,18 +155,18 @@ function RiskCard({ data }: { data: ValuationResult }) {
   return (
     <Card className="col-span-full lg:col-span-2">
       <div className="flex items-center gap-2 mb-4">
-        <AlertTriangle className="w-4 h-4 text-red-400" />
-        <span className="text-sm font-semibold text-white">Risk & Fraud Detection</span>
+        <AlertTriangle className="w-4 h-4 text-red-500" />
+        <span className="text-sm font-semibold text-gray-800">Risk & Fraud Detection</span>
         <div className="ml-auto flex items-center gap-2">
           <span className={`text-2xl font-bold ${riskColorClass}`}>{data.riskScore}</span>
-          <span className="text-slate-400 text-sm">/100</span>
+          <span className="text-gray-400 text-sm">/100</span>
           <Badge variant={data.overallRiskLabel as RiskLabel}>
             {data.overallRiskLabel?.replace('_', ' ').toUpperCase()}
           </Badge>
         </div>
       </div>
       {data.redFlags?.length === 0 ? (
-        <div className="flex items-center gap-2 text-emerald-400 text-sm py-2">
+        <div className="flex items-center gap-2 text-emerald-600 text-sm py-2">
           <CheckCircle className="w-4 h-4" />
           No risk flags detected
         </div>
@@ -201,25 +199,25 @@ function ValueDriversCard({ data }: { data: ValuationResult }) {
   return (
     <Card className="col-span-full lg:col-span-2">
       <div className="flex items-center gap-2 mb-4">
-        <TrendingUp className="w-4 h-4 text-[#1a9eff]" />
-        <span className="text-sm font-semibold text-white">Value Drivers</span>
+        <TrendingUp className="w-4 h-4 text-indigo-500" />
+        <span className="text-sm font-semibold text-gray-800">Value Drivers</span>
       </div>
       <div className="space-y-3">
         {Object.values(data.valueDrivers || {}).map((driver, i) => (
           <div key={driver.label}>
             <div className="flex justify-between mb-1">
-              <span className="text-xs text-slate-400">{driver.label}</span>
-              <span className="text-xs text-white font-medium">{driver.value} {driver.unit}</span>
+              <span className="text-xs text-gray-500">{driver.label}</span>
+              <span className="text-xs text-gray-800 font-medium">{driver.value} {driver.unit}</span>
             </div>
-            <div className="h-2 bg-[#1a2d4a] rounded-full overflow-hidden">
+            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
               <motion.div
-                className="h-full bg-gradient-to-r from-[#1a9eff] to-[#4db8ff] rounded-full"
+                className="h-full bg-indigo-500 rounded-full"
                 initial={{ width: 0 }}
                 animate={{ width: `${driver.weight}%` }}
                 transition={{ duration: 0.8, delay: i * 0.1 }}
               />
             </div>
-            <p className="text-xs text-slate-600 mt-0.5">Weight: {driver.weight}%</p>
+            <p className="text-xs text-gray-400 mt-0.5">Weight: {driver.weight}%</p>
           </div>
         ))}
       </div>
@@ -231,14 +229,14 @@ function ComparablesCard({ data }: { data: ValuationResult }) {
   return (
     <Card className="col-span-full">
       <div className="flex items-center gap-2 mb-4">
-        <Info className="w-4 h-4 text-[#1a9eff]" />
-        <span className="text-sm font-semibold text-white">Comparable Transactions</span>
-        <span className="ml-auto text-xs text-slate-500">{data.comparables?.length || 0} comps found</span>
+        <Info className="w-4 h-4 text-indigo-500" />
+        <span className="text-sm font-semibold text-gray-800">Comparable Transactions</span>
+        <span className="ml-auto text-xs text-gray-400">{data.comparables?.length || 0} comps found</span>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
-            <tr className="text-slate-400 border-b border-white/5">
+            <tr className="text-gray-400 border-b border-gray-100">
               <th className="text-left py-2 pr-4">Property</th>
               <th className="text-right pr-4">Area (sqft)</th>
               <th className="text-right pr-4">Price/sqft</th>
@@ -249,13 +247,13 @@ function ComparablesCard({ data }: { data: ValuationResult }) {
           </thead>
           <tbody>
             {(data.comparables || []).map((comp, i) => (
-              <tr key={i} className="border-b border-white/5 text-white hover:bg-white/2 transition-colors">
-                <td className="py-2 pr-4 text-slate-300 capitalize">{comp.propertyType} – {comp.quality}</td>
+              <tr key={i} className="border-b border-gray-50 text-gray-700 hover:bg-gray-50 transition-colors">
+                <td className="py-2 pr-4 capitalize">{comp.propertyType} – {comp.quality}</td>
                 <td className="text-right pr-4">{comp.area?.toLocaleString('en-IN')}</td>
-                <td className="text-right pr-4 text-[#1a9eff]">₹{comp.pricePerSqft?.toLocaleString('en-IN')}</td>
+                <td className="text-right pr-4 text-indigo-600">₹{comp.pricePerSqft?.toLocaleString('en-IN')}</td>
                 <td className="text-right pr-4">{formatCurrencyShort(comp.price)}</td>
                 <td className="text-right pr-4">{comp.age}</td>
-                <td className="text-right text-slate-400">{comp.transactionDate ? new Date(comp.transactionDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : '—'}</td>
+                <td className="text-right text-gray-400">{comp.transactionDate ? new Date(comp.transactionDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : '—'}</td>
               </tr>
             ))}
           </tbody>
@@ -269,19 +267,19 @@ function AuditTrailCard({ data }: { data: ValuationResult }) {
   return (
     <Card className="col-span-full">
       <div className="flex items-center gap-2 mb-4">
-        <Clock className="w-4 h-4 text-[#1a9eff]" />
-        <span className="text-sm font-semibold text-white">Audit Trail</span>
-        <span className="ml-auto text-xs text-slate-500">Total: {data.processingTime}ms</span>
+        <Clock className="w-4 h-4 text-indigo-500" />
+        <span className="text-sm font-semibold text-gray-800">Audit Trail</span>
+        <span className="ml-auto text-xs text-gray-400">Total: {data.processingTime}ms</span>
       </div>
       <div className="space-y-2">
         {data.auditTrail?.map((entry, i) => (
-          <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg bg-[#071428] border border-white/5">
-            <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+          <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg bg-gray-50 border border-gray-100">
+            <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
             <div className="flex-1">
-              <span className="text-sm text-white font-medium">{entry.engine}</span>
-              <span className="text-xs text-slate-500 ml-2">{formatDate(entry.timestamp)}</span>
+              <span className="text-sm text-gray-800 font-medium">{entry.engine}</span>
+              <span className="text-xs text-gray-400 ml-2">{formatDate(entry.timestamp)}</span>
             </div>
-            <span className="text-xs text-[#1a9eff] bg-[#1a9eff]/10 px-2 py-0.5 rounded-full">{entry.duration}ms</span>
+            <span className="text-xs text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">{entry.duration}ms</span>
           </div>
         ))}
       </div>
@@ -303,46 +301,46 @@ export default function ValuationDashboard() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#040d1a] flex items-center justify-center">
-        <div className="text-slate-400">Loading valuation...</div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-gray-400">Loading valuation...</div>
       </div>
     );
   }
 
   if (isError || !valuation) {
     return (
-      <div className="min-h-screen bg-[#040d1a] flex items-center justify-center">
-        <div className="text-red-400">Failed to load valuation. <button className="text-[#1a9eff] underline" onClick={() => navigate('/')}>Go back</button></div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-red-500">Failed to load valuation. <button className="text-indigo-600 underline" onClick={() => navigate('/app/new-applicant')}>Go back</button></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#040d1a] py-8 px-4">
+    <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <button onClick={() => navigate('/')} className="text-slate-400 hover:text-white text-sm transition-colors">← New Valuation</button>
-              <ChevronRight className="w-3 h-3 text-slate-600" />
-              <span className="text-slate-300 text-sm capitalize">
+              <button onClick={() => navigate('/app/new-applicant')} className="text-gray-400 hover:text-gray-700 text-sm transition-colors">← New Valuation</button>
+              <ChevronRight className="w-3 h-3 text-gray-300" />
+              <span className="text-gray-600 text-sm capitalize">
                 {valuation.propertySnapshot?.propertyType} — {valuation.propertySnapshot?.locality}, {valuation.propertySnapshot?.city}
               </span>
             </div>
-            <h1 className="text-xl font-bold text-white">Valuation Report</h1>
-            <p className="text-xs text-slate-500 mt-0.5">ID: {id} • {formatDate(valuation.createdAt)}</p>
+            <h1 className="text-xl font-bold text-gray-900">Valuation Report</h1>
+            <p className="text-xs text-gray-400 mt-0.5">ID: {id} • {formatDate(valuation.createdAt)}</p>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => navigate(`/report/${id}`)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-sm text-white border border-white/10 transition-colors">
+            <button onClick={() => navigate(`/app/report/${id}`)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white hover:bg-gray-50 text-sm text-gray-700 border border-gray-200 transition-colors shadow-sm">
               <FileText className="w-4 h-4" />
               Full Report
             </button>
-            <button onClick={() => navigate('/')} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#1a9eff]/15 hover:bg-[#1a9eff]/25 text-sm text-[#1a9eff] border border-[#1a9eff]/30 transition-colors">
+            <button onClick={() => navigate('/app/new-applicant')} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-sm text-indigo-600 border border-indigo-200 transition-colors">
               <RefreshCw className="w-4 h-4" />
               Re-evaluate
             </button>
-            <button onClick={() => window.print()} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#1a9eff] hover:bg-[#0080e6] text-sm text-white transition-colors">
+            <button onClick={() => window.print()} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-sm text-white transition-colors shadow-sm">
               <Download className="w-4 h-4" />
               Download
             </button>
@@ -351,12 +349,12 @@ export default function ValuationDashboard() {
 
         {/* Market Context Strip */}
         {valuation.marketData && (
-          <div className="mb-5 p-3 rounded-xl border border-white/5 bg-white/2 flex flex-wrap gap-5 text-xs text-slate-400">
+          <div className="mb-5 p-3 rounded-xl border border-gray-200 bg-white flex flex-wrap gap-5 text-xs text-gray-500 shadow-sm">
             <span>📍 {valuation.marketData.city} — {valuation.marketData.locality}</span>
             <span>Avg ₹{valuation.marketData.avgPricePerSqft?.toLocaleString('en-IN')}/sqft</span>
             <span>Circle Rate: ₹{valuation.marketData.circleRate?.toLocaleString('en-IN')}/sqft</span>
             <span>Demand Index: {valuation.marketData.demandIndex}/10</span>
-            <span className="text-emerald-400">YoY Appreciation: +{valuation.marketData.yoyAppreciation}%</span>
+            <span className="text-emerald-600">YoY Appreciation: +{valuation.marketData.yoyAppreciation}%</span>
           </div>
         )}
 

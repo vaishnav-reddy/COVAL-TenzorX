@@ -1,16 +1,16 @@
 import { motion } from 'framer-motion';
 
 interface GaugeChartProps {
-  value: number; // 0–100
+  value: number;
   label?: string;
   color?: string;
   size?: number;
 }
 
-export function GaugeChart({ value, label, color = '#1a9eff', size = 140 }: GaugeChartProps) {
+export function GaugeChart({ value, label, color = '#6366f1', size = 140 }: GaugeChartProps) {
   const strokeWidth = 12;
   const radius = (size - strokeWidth) / 2;
-  const circumference = Math.PI * radius; // half circle
+  const circumference = Math.PI * radius;
   const offset = circumference - (value / 100) * circumference;
   const center = size / 2;
 
@@ -19,7 +19,7 @@ export function GaugeChart({ value, label, color = '#1a9eff', size = 140 }: Gaug
       <svg width={size} height={size / 2 + strokeWidth} viewBox={`0 0 ${size} ${size / 2 + strokeWidth}`}>
         <circle
           cx={center} cy={center} r={radius}
-          fill="none" stroke="#1a2d4a" strokeWidth={strokeWidth}
+          fill="none" stroke="#e5e7eb" strokeWidth={strokeWidth}
           strokeDasharray={`${circumference} ${circumference}`}
           strokeDashoffset={0}
           transform={`rotate(180 ${center} ${center})`}
@@ -37,14 +37,14 @@ export function GaugeChart({ value, label, color = '#1a9eff', size = 140 }: Gaug
       </svg>
       <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center pb-1">
         <motion.span
-          className="text-3xl font-bold text-white"
+          className="text-3xl font-bold text-gray-800"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.8 }}
         >
           {value}
         </motion.span>
-        {label && <span className="text-xs text-slate-400">{label}</span>}
+        {label && <span className="text-xs text-gray-400">{label}</span>}
       </div>
     </div>
   );

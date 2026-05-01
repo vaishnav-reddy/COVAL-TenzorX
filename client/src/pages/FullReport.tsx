@@ -11,7 +11,7 @@ import { Badge } from '../components/ui/Badge';
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="mb-8 print:mb-6">
-      <h2 className="text-base font-bold text-white border-b border-[#1a9eff]/30 pb-2 mb-4">{title}</h2>
+      <h2 className="text-base font-bold text-gray-900 border-b border-indigo-100 pb-2 mb-4">{title}</h2>
       {children}
     </div>
   );
@@ -19,9 +19,9 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 function Row({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="flex justify-between py-1.5 border-b border-white/5 text-sm">
-      <span className="text-slate-400">{label}</span>
-      <span className="text-white font-medium">{value}</span>
+    <div className="flex justify-between py-1.5 border-b border-gray-50 text-sm">
+      <span className="text-gray-500">{label}</span>
+      <span className="text-gray-800 font-medium">{value}</span>
     </div>
   );
 }
@@ -38,56 +38,56 @@ export default function FullReport() {
 
   const v: ValuationResult = data?.data;
 
-  if (isLoading) return <div className="min-h-screen bg-[#040d1a] flex items-center justify-center text-slate-400">Loading report...</div>;
-  if (!v) return <div className="min-h-screen bg-[#040d1a] flex items-center justify-center text-red-400">Report not found</div>;
+  if (isLoading) return <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-400">Loading report...</div>;
+  if (!v) return <div className="min-h-screen bg-gray-50 flex items-center justify-center text-red-500">Report not found</div>;
 
   const p = v.propertySnapshot;
 
   return (
-    <div className="min-h-screen bg-[#040d1a] py-8 px-4">
+    <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-6 print:hidden">
-          <button onClick={() => navigate(`/dashboard/${id}`)} className="flex items-center gap-2 text-slate-400 hover:text-white text-sm transition-colors">
+          <button onClick={() => navigate(`/app/dashboard/${id}`)} className="flex items-center gap-2 text-gray-400 hover:text-gray-700 text-sm transition-colors">
             <ArrowLeft className="w-4 h-4" /> Back to Dashboard
           </button>
-          <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-[#1a9eff] hover:bg-[#0080e6] text-white text-sm rounded-lg transition-colors">
+          <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg transition-colors">
             <Printer className="w-4 h-4" /> Print / Export PDF
           </button>
         </div>
 
         {/* Cover */}
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="rounded-2xl border border-white/10 bg-[#071428] p-8 mb-6">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="rounded-2xl border border-gray-200 bg-white p-8 mb-6 shadow-sm">
           <div className="flex justify-between items-start flex-wrap gap-4">
             <div>
-              <div className="text-xs text-[#1a9eff] uppercase tracking-widest mb-2">COVAL Collateral Valuation Report</div>
-              <h1 className="text-3xl font-extrabold text-white mb-1 capitalize">{p?.propertyType} Property</h1>
-              <p className="text-slate-400">{p?.locality}, {p?.city}</p>
-              <p className="text-xs text-slate-500 mt-1">Report ID: {id} • Generated: {formatDate(v.createdAt)}</p>
+              <div className="text-xs text-indigo-600 uppercase tracking-widest mb-2">COVAL Collateral Valuation Report</div>
+              <h1 className="text-3xl font-extrabold text-gray-900 mb-1 capitalize">{p?.propertyType} Property</h1>
+              <p className="text-gray-500">{p?.locality}, {p?.city}</p>
+              <p className="text-xs text-gray-400 mt-1">Report ID: {id} • Generated: {formatDate(v.createdAt)}</p>
             </div>
             <div className="text-right">
-              <p className="text-xs text-slate-400 mb-1">Assessed Value Range</p>
-              <p className="text-2xl font-bold text-[#4db8ff]">{formatCurrencyShort(v.valueRangeLow)} – {formatCurrencyShort(v.valueRangeHigh)}</p>
+              <p className="text-xs text-gray-400 mb-1">Assessed Value Range</p>
+              <p className="text-2xl font-bold text-indigo-600">{formatCurrencyShort(v.valueRangeLow)} – {formatCurrencyShort(v.valueRangeHigh)}</p>
               <Badge variant={v.overallRiskLabel}>{v.overallRiskLabel?.replace('_', ' ').toUpperCase()}</Badge>
             </div>
           </div>
         </motion.div>
 
-        <div className="rounded-2xl border border-white/8 bg-[#071428] p-8 space-y-1">
+        <div className="rounded-2xl border border-gray-200 bg-white p-8 space-y-1 shadow-sm">
           {/* Executive Summary */}
           <Section title="1. Executive Summary">
-            <p className="text-sm text-slate-300 leading-relaxed">
-              COVAL has assessed a <strong className="text-white">{p?.area?.toLocaleString('en-IN')} sqft {p?.propertyType}</strong> property located at <strong className="text-white">{p?.locality}, {p?.city}</strong>,
-              constructed in <strong className="text-white">{p?.yearOfConstruction || 'N/A'}</strong>, with <strong className="text-white">{p?.constructionQuality}</strong> quality construction.
-              The AI-assessed market value ranges from <strong className="text-[#4db8ff]">{formatCurrencyShort(v.valueRangeLow)}</strong> to <strong className="text-[#4db8ff]">{formatCurrencyShort(v.valueRangeHigh)}</strong> (base: {formatCurrencyShort(v.marketValue)}).
-              Distress/liquidation value is estimated at <strong className="text-amber-400">{formatCurrency(v.distressValue)}</strong>.
-              The overall risk classification is <strong className="text-white capitalize">{v.overallRiskLabel?.replace('_', ' ')}</strong> with a confidence score of <strong className="text-white">{v.confidenceScore}%</strong>.
+            <p className="text-sm text-gray-600 leading-relaxed">
+              COVAL has assessed a <strong className="text-gray-900">{p?.area?.toLocaleString('en-IN')} sqft {p?.propertyType}</strong> property located at <strong className="text-gray-900">{p?.locality}, {p?.city}</strong>,
+              constructed in <strong className="text-gray-900">{p?.yearOfConstruction || 'N/A'}</strong>, with <strong className="text-gray-900">{p?.constructionQuality}</strong> quality construction.
+              The AI-assessed market value ranges from <strong className="text-indigo-600">{formatCurrencyShort(v.valueRangeLow)}</strong> to <strong className="text-indigo-600">{formatCurrencyShort(v.valueRangeHigh)}</strong> (base: {formatCurrencyShort(v.marketValue)}).
+              Distress/liquidation value is estimated at <strong className="text-amber-600">{formatCurrency(v.distressValue)}</strong>.
+              The overall risk classification is <strong className="text-gray-900 capitalize">{v.overallRiskLabel?.replace('_', ' ')}</strong> with a confidence score of <strong className="text-gray-900">{v.confidenceScore}%</strong>.
             </p>
           </Section>
 
           {/* Methodology */}
           <Section title="2. Valuation Methodology">
-            <p className="text-sm text-slate-400 mb-3">The valuation uses a rule-based comparable analysis engine with the following formula:</p>
-            <div className="bg-[#040d1a] rounded-lg p-4 font-mono text-xs text-[#4db8ff] mb-3">
+            <p className="text-sm text-gray-500 mb-3">The valuation uses a rule-based comparable analysis engine with the following formula:</p>
+            <div className="bg-gray-50 rounded-lg p-4 font-mono text-xs text-indigo-600 mb-3 border border-gray-100">
               marketValue = (pricePerSqft × area) × locationMultiplier × ageDepreciation × qualityMultiplier
             </div>
             <div className="space-y-1">
@@ -161,7 +161,7 @@ export default function FullReport() {
             <div className="space-y-1">
               <Row label="Market Value" value={formatCurrency(v.marketValue)} />
               <Row label="Distress Multiplier" value={`${v.distressMultiplier}x`} />
-              <Row label="Distress / Liquidation Value" value={<span className="text-amber-400">{formatCurrency(v.distressValue)}</span>} />
+              <Row label="Distress / Liquidation Value" value={<span className="text-amber-600">{formatCurrency(v.distressValue)}</span>} />
               <Row label="Liquidation Timeline" value={v.liquidationTimeline} />
               <Row label="RBI Erosion Flag" value={v.rbiErosionFlag ? <Badge variant="critical">TRIGGERED</Badge> : <Badge variant="safe">CLEAR</Badge>} />
             </div>
@@ -180,7 +180,7 @@ export default function FullReport() {
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="text-slate-400 border-b border-white/10">
+                  <tr className="text-gray-400 border-b border-gray-100">
                     <th className="text-left py-2 pr-4">Type</th>
                     <th className="text-right pr-4">Area</th>
                     <th className="text-right pr-4">₹/sqft</th>
@@ -190,7 +190,7 @@ export default function FullReport() {
                 </thead>
                 <tbody>
                   {v.comparables?.map((c, i) => (
-                    <tr key={i} className="border-b border-white/5 text-slate-300">
+                    <tr key={i} className="border-b border-gray-50 text-gray-600">
                       <td className="py-2 pr-4 capitalize">{c.propertyType}</td>
                       <td className="text-right pr-4">{c.area?.toLocaleString('en-IN')}</td>
                       <td className="text-right pr-4">₹{c.pricePerSqft?.toLocaleString('en-IN')}</td>
@@ -215,10 +215,10 @@ export default function FullReport() {
 
           {/* Recommendations */}
           <Section title="11. Recommendations for Lender">
-            <div className="space-y-2 text-sm text-slate-300">
-              {v.overallRiskLabel === 'safe' && <p className="text-emerald-400">✓ Property is suitable as collateral. Proceed with standard due diligence.</p>}
-              {v.overallRiskLabel === 'caution' && <p className="text-amber-400">⚠ Exercise caution. Verify all flagged items before proceeding.</p>}
-              {v.overallRiskLabel === 'high_risk' && <p className="text-red-400">✗ High risk classification. Independent valuation and legal verification strongly advised before disbursement.</p>}
+            <div className="space-y-2 text-sm text-gray-600">
+              {v.overallRiskLabel === 'safe' && <p className="text-emerald-600">✓ Property is suitable as collateral. Proceed with standard due diligence.</p>}
+              {v.overallRiskLabel === 'caution' && <p className="text-amber-600">⚠ Exercise caution. Verify all flagged items before proceeding.</p>}
+              {v.overallRiskLabel === 'high_risk' && <p className="text-red-600">✗ High risk classification. Independent valuation and legal verification strongly advised before disbursement.</p>}
               {v.rbiErosionFlag && <p>• RBI Erosion threshold triggered — ensure LTV does not exceed regulatory limits.</p>}
               {v.confidenceScore < 60 && <p>• Low confidence score — recommend field verification and additional data collection.</p>}
               {v.liquidityScore < 50 && <p>• Low liquidity property — factor extended recovery timelines in NPA provisioning.</p>}
@@ -228,11 +228,11 @@ export default function FullReport() {
 
           {/* RBI Compliance */}
           <Section title="12. RBI Compliance Notes">
-            <div className="text-sm text-slate-300 space-y-1">
+            <div className="text-sm text-gray-600 space-y-1">
               <p>• This valuation follows RBI Master Circular on Loans and Advances – Statutory and Other Restrictions guidelines.</p>
               {v.rbiErosionFlag
-                ? <p className="text-red-400">• RBI Significant Erosion Flag: Distress value ({formatCurrency(v.distressValue)}) is below 50% of assessed market value ({formatCurrency(v.marketValue)}). This must be reported per RBI NPA provisioning norms.</p>
-                : <p className="text-emerald-400">• RBI Erosion threshold: CLEAR. Distress value is above 50% of assessed market value.</p>}
+                ? <p className="text-red-600">• RBI Significant Erosion Flag: Distress value ({formatCurrency(v.distressValue)}) is below 50% of assessed market value ({formatCurrency(v.marketValue)}). This must be reported per RBI NPA provisioning norms.</p>
+                : <p className="text-emerald-600">• RBI Erosion threshold: CLEAR. Distress value is above 50% of assessed market value.</p>}
               <p>• CERSAI verification is mandatory prior to loan disbursement.</p>
               <p>• Panel valuer physical inspection is recommended for properties above ₹5 Cr.</p>
             </div>
@@ -242,13 +242,13 @@ export default function FullReport() {
           <Section title="13. Audit Trail">
             <div className="space-y-2">
               {v.auditTrail?.map((entry, i) => (
-                <div key={i} className="flex items-center justify-between p-2.5 rounded-lg bg-[#040d1a] border border-white/5 text-xs">
-                  <span className="text-white font-medium">{entry.engine}</span>
-                  <span className="text-slate-400">{formatDate(entry.timestamp)}</span>
-                  <span className="text-[#1a9eff]">{entry.duration}ms</span>
+                <div key={i} className="flex items-center justify-between p-2.5 rounded-lg bg-gray-50 border border-gray-100 text-xs">
+                  <span className="text-gray-800 font-medium">{entry.engine}</span>
+                  <span className="text-gray-400">{formatDate(entry.timestamp)}</span>
+                  <span className="text-indigo-600">{entry.duration}ms</span>
                 </div>
               ))}
-              <div className="text-xs text-slate-500 pt-1">Total processing time: {v.processingTime}ms</div>
+              <div className="text-xs text-gray-400 pt-1">Total processing time: {v.processingTime}ms</div>
             </div>
           </Section>
         </div>

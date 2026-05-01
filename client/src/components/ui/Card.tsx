@@ -11,8 +11,8 @@ export function Card({ children, className, glowing }: CardProps) {
   return (
     <div
       className={clsx(
-        'rounded-xl border border-white/8 bg-[#0d2044]/60 backdrop-blur-sm p-5',
-        glowing && 'shadow-[0_0_30px_rgba(26,158,255,0.12)]',
+        'rounded-xl border border-gray-100 bg-white p-5 shadow-sm',
+        glowing && 'shadow-md ring-1 ring-indigo-100',
         className
       )}
     >

@@ -8,14 +8,14 @@ interface BadgeProps {
 }
 
 const variantMap: Record<string, string> = {
-  safe: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/40',
-  high: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/40',
-  caution: 'bg-amber-500/15 text-amber-400 border border-amber-500/40',
-  medium: 'bg-amber-500/15 text-amber-400 border border-amber-500/40',
-  high_risk: 'bg-red-500/15 text-red-400 border border-red-500/40',
-  critical: 'bg-red-500/15 text-red-400 border border-red-500/40',
-  low: 'bg-blue-500/15 text-blue-400 border border-blue-500/40',
-  info: 'bg-blue-500/15 text-blue-400 border border-blue-500/40',
+  safe: 'bg-emerald-50 text-emerald-600 border border-emerald-200',
+  high: 'bg-emerald-50 text-emerald-600 border border-emerald-200',
+  caution: 'bg-amber-50 text-amber-600 border border-amber-200',
+  medium: 'bg-amber-50 text-amber-600 border border-amber-200',
+  high_risk: 'bg-red-50 text-red-600 border border-red-200',
+  critical: 'bg-red-50 text-red-600 border border-red-200',
+  low: 'bg-blue-50 text-blue-600 border border-blue-200',
+  info: 'bg-blue-50 text-blue-600 border border-blue-200',
 };
 
 export function Badge({ children, variant = 'info', className }: BadgeProps) {

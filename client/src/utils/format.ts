@@ -15,21 +15,21 @@ export function formatDate(iso: string): string {
 }
 
 export function getRiskColor(label: string): string {
-  if (label === 'safe') return 'text-emerald-400';
-  if (label === 'caution') return 'text-amber-400';
-  return 'text-red-400';
+  if (label === 'safe') return 'text-emerald-600';
+  if (label === 'caution') return 'text-amber-600';
+  return 'text-red-600';
 }
 
 export function getRiskBg(label: string): string {
-  if (label === 'safe') return 'bg-emerald-500/15 border-emerald-500/40';
-  if (label === 'caution') return 'bg-amber-500/15 border-amber-500/40';
-  return 'bg-red-500/15 border-red-500/40';
+  if (label === 'safe') return 'bg-emerald-50 border-emerald-200';
+  if (label === 'caution') return 'bg-amber-50 border-amber-200';
+  return 'bg-red-50 border-red-200';
 }
 
 export function getSeverityColor(severity: string): string {
-  if (severity === 'critical') return 'text-red-400 bg-red-500/10 border-red-500/30';
-  if (severity === 'medium') return 'text-amber-400 bg-amber-500/10 border-amber-500/30';
-  return 'text-blue-400 bg-blue-500/10 border-blue-500/30';
+  if (severity === 'critical') return 'text-red-600 bg-red-50 border-red-200';
+  if (severity === 'medium') return 'text-amber-600 bg-amber-50 border-amber-200';
+  return 'text-blue-600 bg-blue-50 border-blue-200';
 }
 
 export function getConfidenceColor(score: number): string {

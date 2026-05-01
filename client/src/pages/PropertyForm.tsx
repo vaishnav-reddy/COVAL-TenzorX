@@ -1,19 +1,26 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Building2, MapPin, Ruler, Calendar, Layers, Wrench, DollarSign, Target, Upload, ChevronRight } from 'lucide-react';
+import {
+  Upload, MapPin, X, ChevronRight, Building2, Ruler,
+  Wrench, Layers, DollarSign, Target, ChevronLeft, ChevronDown, User, Mail, Phone, GripVertical
+} from 'lucide-react';
+import { MapView } from '../components/ui/MapView';
 import toast from 'react-hot-toast';
 import { createValuation, getCities, getCityLocalities } from '../utils/api';
 import { useValuation } from '../context/ValuationContext';
 import { EngineLoader } from '../components/ui/EngineLoader';
-import { Card } from '../components/ui/Card';
 
 const AMENITIES_LIST = ['Parking', 'Lift', 'Security', 'Gym', 'Swimming Pool', 'Power Backup', 'Garden', 'Club House', 'CCTV', 'Intercom'];
 
 export default function PropertyForm() {
   const navigate = useNavigate();
   const { setCurrentValuation } = useValuation();
+  const [showMap, setShowMap] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarWidth, setSidebarWidth] = useState(380);
+  const [isDragging, setIsDragging] = useState(false);
   const [form, setForm] = useState({
     propertyType: 'residential',
     city: '',
@@ -27,6 +34,11 @@ export default function PropertyForm() {
     constructionQuality: 'good',
     declaredValue: '',
     purpose: 'lap',
+    applicantName: '',
+    applicantEmail: '',
+    applicantPhone: '',
+    applicantPAN: '',
+    applicantOccupation: '',
   });
   const [selectedCity, setSelectedCity] = useState('');
 
@@ -44,8 +56,8 @@ export default function PropertyForm() {
     mutationFn: createValuation,
     onSuccess: (data) => {
       setCurrentValuation(data.data);
-      toast.success('Valuation completed successfully');
-      navigate(`/dashboard/${data.data.valuationId || data.data._id}`);
+      toast.success('Valuation completed');
+      navigate(`/app/dashboard/${data.data.valuationId || data.data._id}`);
     },
     onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Valuation failed';
@@ -56,241 +68,400 @@ export default function PropertyForm() {
   function toggleAmenity(amenity: string) {
     setForm((f) => ({
       ...f,
-      amenities: f.amenities.includes(amenity) ? f.amenities.filter((a) => a !== amenity) : [...f.amenities, amenity],
+      amenities: f.amenities.includes(amenity)
+        ? f.amenities.filter((a) => a !== amenity)
+        : [...f.amenities, amenity],
     }));
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.city || !form.locality || !form.area || !form.declaredValue) {
+    if (!form.city || !form.locality || !form.area || !form.declaredValue || !form.applicantName || !form.applicantEmail || !form.applicantPhone) {
       toast.error('Please fill all required fields');
       return;
     }
-    mutation.mutate({ ...form, area: parseFloat(form.area), declaredValue: parseFloat(form.declaredValue) });
+    mutation.mutate({
+      ...form,
+      area: parseFloat(form.area),
+      declaredValue: parseFloat(form.declaredValue),
+    });
   }
 
-  const inputClass = 'w-full bg-[#071428] border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-[#1a9eff]/60 transition-colors';
-  const labelClass = 'block text-xs font-medium text-slate-400 mb-1.5';
+  const inputClass = 'w-full bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-gray-800 text-sm focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 transition-colors placeholder:text-gray-400';
+  const labelClass = 'block text-xs font-medium text-gray-500 mb-1.5';
+
+  // Handle resizable panel
+  const handleMouseDown = () => {
+    setIsDragging(true);
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDragging) return;
+    const newWidth = e.clientX;
+    if (newWidth > 250 && newWidth < 600) {
+      setSidebarWidth(newWidth);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-[#040d1a] py-10 px-4">
+    <div className="flex h-screen bg-gray-50 overflow-hidden" onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
       {mutation.isPending && <EngineLoader />}
-      <div className="max-w-3xl mx-auto">
-        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-[#1a9eff]/20 flex items-center justify-center">
-              <Building2 className="w-5 h-5 text-[#1a9eff]" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-white">Property Valuation</h1>
-              <p className="text-slate-400 text-sm">AI-powered collateral assessment for NBFCs</p>
-            </div>
-          </div>
-        </motion.div>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Property Type */}
-          <Card>
-            <div className="flex items-center gap-2 mb-4">
-              <Building2 className="w-4 h-4 text-[#1a9eff]" />
-              <h2 className="text-sm font-semibold text-white">Property Details</h2>
-            </div>
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              {['residential', 'commercial', 'industrial', 'land'].map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => setForm((f) => ({ ...f, propertyType: type }))}
-                  className={`py-2.5 rounded-lg border text-sm font-medium capitalize transition-all ${
-                    form.propertyType === type
-                      ? 'border-[#1a9eff] bg-[#1a9eff]/15 text-[#1a9eff]'
-                      : 'border-white/10 text-slate-400 hover:border-white/20'
-                  }`}
-                >
-                  {type}
-                </button>
-              ))}
-            </div>
-            <div className="grid grid-cols-1 gap-3">
-              <div>
-                <label className={labelClass}>Purpose *</label>
-                <select className={inputClass} value={form.purpose} onChange={(e) => setForm((f) => ({ ...f, purpose: e.target.value }))}>
-                  <option value="lap">Loan Against Property (LAP)</option>
-                  <option value="mortgage">Mortgage</option>
-                  <option value="working_capital">Working Capital</option>
-                </select>
-              </div>
-            </div>
-          </Card>
-
-          {/* Location */}
-          <Card>
-            <div className="flex items-center gap-2 mb-4">
-              <MapPin className="w-4 h-4 text-[#1a9eff]" />
-              <h2 className="text-sm font-semibold text-white">Location</h2>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelClass}>City *</label>
-                <select
-                  className={inputClass}
-                  value={form.city}
-                  onChange={(e) => { setForm((f) => ({ ...f, city: e.target.value, locality: '' })); setSelectedCity(e.target.value); }}
-                >
-                  <option value="">Select City</option>
-                  {cities.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className={labelClass}>Locality *</label>
-                {localities.length > 0 ? (
-                  <select className={inputClass} value={form.locality} onChange={(e) => setForm((f) => ({ ...f, locality: e.target.value }))}>
-                    <option value="">Select Locality</option>
-                    {localities.map((l: { locality: string }) => <option key={l.locality} value={l.locality}>{l.locality}</option>)}
-                  </select>
-                ) : (
-                  <input className={inputClass} value={form.locality} onChange={(e) => setForm((f) => ({ ...f, locality: e.target.value }))} placeholder="Enter locality" />
-                )}
-              </div>
-              <div>
-                <label className={labelClass}>Pincode</label>
-                <input className={inputClass} value={form.pincode} onChange={(e) => setForm((f) => ({ ...f, pincode: e.target.value }))} placeholder="e.g. 400001" />
-              </div>
-            </div>
-          </Card>
-
-          {/* Property Specs */}
-          <Card>
-            <div className="flex items-center gap-2 mb-4">
-              <Ruler className="w-4 h-4 text-[#1a9eff]" />
-              <h2 className="text-sm font-semibold text-white">Property Specifications</h2>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelClass}>Total Area (sq ft) *</label>
-                <input type="number" className={inputClass} value={form.area} onChange={(e) => setForm((f) => ({ ...f, area: e.target.value }))} placeholder="e.g. 1200" />
-              </div>
-              <div>
-                <label className={labelClass}>Year of Construction</label>
-                <input type="number" className={inputClass} value={form.yearOfConstruction} onChange={(e) => setForm((f) => ({ ...f, yearOfConstruction: e.target.value }))} placeholder="e.g. 2010" />
-              </div>
-              <div>
-                <label className={labelClass}>Floor Number</label>
-                <input type="number" className={inputClass} value={form.floorNumber} onChange={(e) => setForm((f) => ({ ...f, floorNumber: e.target.value }))} placeholder="e.g. 3" />
-              </div>
-              <div>
-                <label className={labelClass}>Total Floors in Building</label>
-                <input type="number" className={inputClass} value={form.totalFloors} onChange={(e) => setForm((f) => ({ ...f, totalFloors: e.target.value }))} placeholder="e.g. 10" />
-              </div>
-            </div>
-          </Card>
-
-          {/* Quality */}
-          <Card>
-            <div className="flex items-center gap-2 mb-4">
-              <Wrench className="w-4 h-4 text-[#1a9eff]" />
-              <h2 className="text-sm font-semibold text-white">Construction Quality</h2>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { value: 'standard', label: 'Standard', desc: '0.95x' },
-                { value: 'good', label: 'Good', desc: '1.00x' },
-                { value: 'premium', label: 'Premium', desc: '1.10x' },
-              ].map((q) => (
-                <button
-                  key={q.value}
-                  type="button"
-                  onClick={() => setForm((f) => ({ ...f, constructionQuality: q.value }))}
-                  className={`py-3 rounded-lg border text-sm font-medium transition-all ${
-                    form.constructionQuality === q.value
-                      ? 'border-[#1a9eff] bg-[#1a9eff]/15 text-[#1a9eff]'
-                      : 'border-white/10 text-slate-400 hover:border-white/20'
-                  }`}
-                >
-                  <div>{q.label}</div>
-                  <div className="text-xs opacity-60 mt-0.5">{q.desc}</div>
-                </button>
-              ))}
-            </div>
-          </Card>
-
-          {/* Amenities */}
-          <Card>
-            <div className="flex items-center gap-2 mb-4">
-              <Layers className="w-4 h-4 text-[#1a9eff]" />
-              <h2 className="text-sm font-semibold text-white">Amenities</h2>
-              <span className="ml-auto text-xs text-slate-500">{form.amenities.length} selected</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {AMENITIES_LIST.map((a) => (
-                <button
-                  key={a}
-                  type="button"
-                  onClick={() => toggleAmenity(a)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
-                    form.amenities.includes(a)
-                      ? 'border-[#1a9eff] bg-[#1a9eff]/15 text-[#1a9eff]'
-                      : 'border-white/10 text-slate-400 hover:border-white/20'
-                  }`}
-                >
-                  {a}
-                </button>
-              ))}
-            </div>
-          </Card>
-
-          {/* Valuation */}
-          <Card>
-            <div className="flex items-center gap-2 mb-4">
-              <DollarSign className="w-4 h-4 text-[#1a9eff]" />
-              <h2 className="text-sm font-semibold text-white">Declared Value</h2>
-            </div>
-            <div>
-              <label className={labelClass}>Value declared by borrower (₹) *</label>
-              <input
-                type="number"
-                className={inputClass}
-                value={form.declaredValue}
-                onChange={(e) => setForm((f) => ({ ...f, declaredValue: e.target.value }))}
-                placeholder="e.g. 8500000"
-              />
-              {form.declaredValue && (
-                <p className="text-xs text-slate-500 mt-1">
-                  ≈ ₹{parseFloat(form.declaredValue) >= 10000000
-                    ? `${(parseFloat(form.declaredValue) / 10000000).toFixed(2)} Cr`
-                    : `${(parseFloat(form.declaredValue) / 100000).toFixed(2)} L`}
-                </p>
-              )}
-            </div>
-          </Card>
-
-          {/* Upload (mock) */}
-          <Card>
-            <div className="flex items-center gap-2 mb-3">
-              <Upload className="w-4 h-4 text-[#1a9eff]" />
-              <h2 className="text-sm font-semibold text-white">Property Images</h2>
-              <span className="ml-auto text-xs text-slate-500">Optional</span>
-            </div>
-            <div className="border-2 border-dashed border-white/10 rounded-lg p-6 text-center text-slate-500 text-sm hover:border-[#1a9eff]/30 transition-colors cursor-pointer">
-              <Upload className="w-6 h-6 mx-auto mb-2 opacity-40" />
-              <p>Drag and drop images or click to browse</p>
-              <p className="text-xs mt-1 opacity-60">JPG, PNG up to 10MB each (mock processing)</p>
-            </div>
-          </Card>
-
-          <motion.button
-            type="submit"
-            disabled={mutation.isPending}
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.99 }}
-            className="w-full py-4 bg-gradient-to-r from-[#1a9eff] to-[#4db8ff] text-white font-semibold rounded-xl text-sm flex items-center justify-center gap-2 shadow-[0_0_30px_rgba(26,158,255,0.3)] disabled:opacity-50 transition-all"
+      {/* Left form panel */}
+      <AnimatePresence initial={false}>
+        {sidebarOpen && (
+          <motion.div
+            key="form-panel"
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: sidebarWidth, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="shrink-0 bg-white border-r border-gray-100 flex flex-col overflow-hidden relative"
           >
-            <Target className="w-5 h-5" />
-            Run COVAL Valuation
-            <ChevronRight className="w-4 h-4" />
-          </motion.button>
-        </form>
+            {/* Close sidebar arrow — positioned at right edge */}
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="absolute -right-5 top-1/2 -translate-y-1/2 z-30 w-5 h-12 bg-gray-100 hover:bg-indigo-50 border-l border-gray-200 flex items-center justify-center text-gray-400 hover:text-indigo-600 transition-colors"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+            <div className="flex-1 overflow-y-auto">
+              {/* Header */}
+              <div className="px-5 py-4 border-b border-gray-100">
+                <h1 className="text-base font-bold text-gray-900">Property Valuation</h1>
+                <p className="text-xs text-gray-400 mt-0.5">Fill details to run AI valuation</p>
+              </div>
+
+              <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4">
+                {/* Property Type */}
+                <Section icon={<Building2 className="w-4 h-4 text-indigo-500" />} title="Property Type">
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    {['residential', 'commercial', 'industrial', 'land'].map((type) => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => setForm((f) => ({ ...f, propertyType: type }))}
+                        className={`py-2 rounded-lg border text-xs font-medium capitalize transition-all ${
+                          form.propertyType === type
+                            ? 'border-indigo-400 bg-indigo-50 text-indigo-600'
+                            : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                        }`}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+                  <div>
+                    <label className={labelClass}>Purpose *</label>
+                    <select className={inputClass} value={form.purpose} onChange={(e) => setForm((f) => ({ ...f, purpose: e.target.value }))}>
+                      <option value="lap">Loan Against Property (LAP)</option>
+                      <option value="mortgage">Mortgage</option>
+                      <option value="working_capital">Working Capital</option>
+                    </select>
+                  </div>
+                </Section>
+
+                {/* Location */}
+                <Section icon={<MapPin className="w-4 h-4 text-indigo-500" />} title="Location">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelClass}>City *</label>
+                      <select
+                        className={inputClass}
+                        value={form.city}
+                        onChange={(e) => {
+                          setForm((f) => ({ ...f, city: e.target.value, locality: '' }));
+                          setSelectedCity(e.target.value);
+                        }}
+                      >
+                        <option value="">Select city</option>
+                        {cities.map((c) => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelClass}>Locality *</label>
+                      <select
+                        className={inputClass}
+                        value={form.locality}
+                        onChange={(e) => setForm((f) => ({ ...f, locality: e.target.value }))}
+                        disabled={!form.city}
+                      >
+                        <option value="">{form.city ? 'Select locality' : 'Select city first'}</option>
+                        {localities.map((l) => <option key={l.locality} value={l.locality}>{l.locality}</option>)}
+                      </select>
+                    </div>
+                    <div className="col-span-2">
+                      <label className={labelClass}>Pincode</label>
+                      <input className={inputClass} value={form.pincode} onChange={(e) => setForm((f) => ({ ...f, pincode: e.target.value }))} placeholder="e.g. 400001" />
+                    </div>
+                  </div>
+                </Section>
+
+                {/* Specs */}
+                <Section icon={<Ruler className="w-4 h-4 text-indigo-500" />} title="Specifications">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelClass}>Area (sq ft) *</label>
+                      <input type="number" className={inputClass} value={form.area} onChange={(e) => setForm((f) => ({ ...f, area: e.target.value }))} placeholder="e.g. 1200" />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Year Built</label>
+                      <input type="number" className={inputClass} value={form.yearOfConstruction} onChange={(e) => setForm((f) => ({ ...f, yearOfConstruction: e.target.value }))} placeholder="e.g. 2010" />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Floor No.</label>
+                      <input type="number" className={inputClass} value={form.floorNumber} onChange={(e) => setForm((f) => ({ ...f, floorNumber: e.target.value }))} placeholder="e.g. 3" />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Total Floors</label>
+                      <input type="number" className={inputClass} value={form.totalFloors} onChange={(e) => setForm((f) => ({ ...f, totalFloors: e.target.value }))} placeholder="e.g. 10" />
+                    </div>
+                  </div>
+                </Section>
+
+                {/* Quality */}
+                <Section icon={<Wrench className="w-4 h-4 text-indigo-500" />} title="Construction Quality">
+                  <div className="grid grid-cols-3 gap-2">
+                    {[{ value: 'standard', label: 'Standard', desc: '0.95x' }, { value: 'good', label: 'Good', desc: '1.00x' }, { value: 'premium', label: 'Premium', desc: '1.10x' }].map((q) => (
+                      <button
+                        key={q.value}
+                        type="button"
+                        onClick={() => setForm((f) => ({ ...f, constructionQuality: q.value }))}
+                        className={`py-2.5 rounded-lg border text-xs font-medium transition-all ${
+                          form.constructionQuality === q.value
+                            ? 'border-indigo-400 bg-indigo-50 text-indigo-600'
+                            : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                        }`}
+                      >
+                        <div>{q.label}</div>
+                        <div className="opacity-60 mt-0.5">{q.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                </Section>
+
+                {/* Amenities */}
+                <Section icon={<Layers className="w-4 h-4 text-indigo-500" />} title="Amenities" badge={`${form.amenities.length} selected`}>
+                  <div className="flex flex-wrap gap-1.5">
+                    {AMENITIES_LIST.map((a) => (
+                      <button
+                        key={a}
+                        type="button"
+                        onClick={() => toggleAmenity(a)}
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                          form.amenities.includes(a)
+                            ? 'border-indigo-400 bg-indigo-50 text-indigo-600'
+                            : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                        }`}
+                      >
+                        {a}
+                      </button>
+                    ))}
+                  </div>
+                </Section>
+
+                {/* Declared Value */}
+                <Section icon={<DollarSign className="w-4 h-4 text-indigo-500" />} title="Declared Value">
+                  <label className={labelClass}>Value declared by borrower (₹) *</label>
+                  <input
+                    type="number"
+                    className={inputClass}
+                    value={form.declaredValue}
+                    onChange={(e) => setForm((f) => ({ ...f, declaredValue: e.target.value }))}
+                    placeholder="e.g. 8500000"
+                  />
+                  {form.declaredValue && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      ≈ ₹{parseFloat(form.declaredValue) >= 10000000
+                        ? `${(parseFloat(form.declaredValue) / 10000000).toFixed(2)} Cr`
+                        : `${(parseFloat(form.declaredValue) / 100000).toFixed(2)} L`}
+                    </p>
+                  )}
+                </Section>
+
+                {/* Applicant Details */}
+                <Section icon={<User className="w-4 h-4 text-indigo-500" />} title="Applicant Details">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2">
+                      <label className={labelClass}>Full Name *</label>
+                      <input
+                        type="text"
+                        className={inputClass}
+                        value={form.applicantName}
+                        onChange={(e) => setForm((f) => ({ ...f, applicantName: e.target.value }))}
+                        placeholder="e.g. John Doe"
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Email *</label>
+                      <input
+                        type="email"
+                        className={inputClass}
+                        value={form.applicantEmail}
+                        onChange={(e) => setForm((f) => ({ ...f, applicantEmail: e.target.value }))}
+                        placeholder="e.g. john@example.com"
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Phone *</label>
+                      <input
+                        type="tel"
+                        className={inputClass}
+                        value={form.applicantPhone}
+                        onChange={(e) => setForm((f) => ({ ...f, applicantPhone: e.target.value }))}
+                        placeholder="e.g. 9876543210"
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>PAN</label>
+                      <input
+                        type="text"
+                        className={inputClass}
+                        value={form.applicantPAN}
+                        onChange={(e) => setForm((f) => ({ ...f, applicantPAN: e.target.value }))}
+                        placeholder="e.g. ABCDE1234F"
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Occupation</label>
+                      <select
+                        className={inputClass}
+                        value={form.applicantOccupation}
+                        onChange={(e) => setForm((f) => ({ ...f, applicantOccupation: e.target.value }))}
+                      >
+                        <option value="">Select occupation</option>
+                        <option value="salaried">Salaried</option>
+                        <option value="self_employed">Self Employed</option>
+                        <option value="business">Business</option>
+                        <option value="professional">Professional</option>
+                        <option value="retired">Retired</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                  </div>
+                </Section>
+
+                {/* Upload */}
+                <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center hover:border-indigo-300 transition-colors cursor-pointer">
+                  <Upload className="w-5 h-5 mx-auto mb-1.5 text-gray-300" />
+                  <p className="text-xs text-gray-400">Drag & drop property images</p>
+                  <p className="text-[10px] text-gray-300 mt-0.5">JPG, PNG up to 10MB (optional)</p>
+                </div>
+
+                <motion.button
+                  type="submit"
+                  disabled={mutation.isPending}
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.99 }}
+                  className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-all shadow-sm"
+                >
+                  <Target className="w-4 h-4" />
+                  Generate Valuation
+                  <ChevronRight className="w-4 h-4" />
+                </motion.button>
+              </form>
+            </div>
+
+            {/* Bottom bar */}
+            <div className="border-t border-gray-100 px-5 py-3 flex items-center justify-between bg-white">
+              <button
+                onClick={() => setShowMap(v => !v)}
+                className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-indigo-600 transition-colors"
+              >
+                <MapPin className="w-3.5 h-3.5" />
+                {showMap ? 'Hide Map' : 'Show Map'}
+              </button>
+              <span className="text-xs text-gray-300">COVAL AI Engine</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Resizable divider */}
+      {sidebarOpen && (
+        <div
+          onMouseDown={handleMouseDown}
+          className={`w-1 bg-gray-200 hover:bg-indigo-400 transition-colors cursor-col-resize ${isDragging ? 'bg-indigo-400' : ''}`}
+        />
+      )}
+
+      {/* Right — Map */}
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        {/* Open sidebar arrow — only when form is hidden */}
+        {!sidebarOpen && (
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="absolute left-0 top-1/2 -translate-y-1/2 z-30 w-5 h-12 bg-gray-100 hover:bg-indigo-50 border-r border-gray-200 flex items-center justify-center text-gray-400 hover:text-indigo-600 transition-colors"
+          >
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        )}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 bg-white shrink-0">
+          <h2 className="text-sm font-semibold text-gray-800">Map View</h2>
+          {!showMap && (
+            <button onClick={() => setShowMap(true)} className="text-xs text-indigo-600 hover:underline">Show map</button>
+          )}
+          {showMap && (
+            <button onClick={() => setShowMap(false)} className="text-gray-400 hover:text-gray-600">
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        {showMap ? (
+          <MapView
+            searchLocation={
+              form.locality && form.city
+                ? `${form.locality}, ${form.city}`
+                : form.city || undefined
+            }
+            onLocationConfirm={(loc) => {
+              toast.success(`Location set: ${loc.placeName.split(',')[0]}`);
+            }}
+          />
+        ) : (
+          <div className="flex-1 flex items-center justify-center bg-gray-50">
+            <button
+              onClick={() => setShowMap(true)}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-500 hover:bg-white transition-colors"
+            >
+              <MapPin className="w-4 h-4" />
+              Open Map View
+            </button>
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+// Collapsible section component
+function Section({
+  icon, title, badge, children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  badge?: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="border border-gray-100 rounded-xl overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center gap-2 px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+      >
+        {icon}
+        <span className="text-xs font-semibold text-gray-700 flex-1">{title}</span>
+        {badge && <span className="text-[10px] text-gray-400 mr-1">{badge}</span>}
+        <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${open ? '' : '-rotate-90'}`} />
+      </button>
+      {open && <div className="px-4 py-3">{children}</div>}
     </div>
   );
 }
