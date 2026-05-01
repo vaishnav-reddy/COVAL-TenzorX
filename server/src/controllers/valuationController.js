@@ -3,11 +3,19 @@ const Valuation = require('../models/Valuation');
 const MarketData = require('../models/MarketData');
 const ComparableTransaction = require('../models/ComparableTransaction');
 
+// ── Existing Engines (unchanged) ────────────────────────────
 const valuationEngine = require('../engines/valuationEngine');
 const distressEngine = require('../engines/distressEngine');
 const liquidityEngine = require('../engines/liquidityEngine');
 const riskEngine = require('../engines/riskEngine');
 const confidenceEngine = require('../engines/confidenceEngine');
+
+// ── New Services (additive layer) ───────────────────────────
+const decisionEngine = require('../services/decisionEngine');
+const sanctionEngine = require('../services/sanctionEngine');
+const auditEngine = require('../services/auditEngine');
+const explanationEngine = require('../services/explanationEngine');
+const scenarioSimulator = require('../services/scenarioSimulator');
 
 async function createValuation(req, res, next) {
   const globalStart = Date.now();
@@ -59,23 +67,109 @@ async function createValuation(req, res, next) {
 
     const auditTrail = [];
 
-    // Run engines sequentially with timing
-    const liquidityResult = liquidityEngine.run(propertyData, marketData);
+    // ── Engine Pipeline ──────────────────────────────────────
+    // Order matters: Liquidity → Valuation → Distress → Risk → Confidence
+    // Each engine feeds data into the next.
+
+    // 1. Liquidity first — needed by distress engine
+    //    Pass null for marketValue on first run (no declared vs market yet)
+    const liquidityResult = liquidityEngine.run(propertyData, marketData, null);
     auditTrail.push({ engine: 'LiquidityEngine', timestamp: new Date(), duration: liquidityResult.duration, output: liquidityResult });
 
-    const valuationResult = valuationEngine.run(propertyData, marketData);
+    // 2. Valuation — uses comparables for Sales Comparison Approach
+    const valuationResult = valuationEngine.run(propertyData, marketData, comparables);
     auditTrail.push({ engine: 'ValuationEngine', timestamp: new Date(), duration: valuationResult.duration, output: valuationResult });
 
-    const distressResult = distressEngine.run(propertyData, valuationResult.marketValue, liquidityResult.liquidityScore);
+    // 3. Re-run liquidity with actual market value for price-vs-median adjustment
+    const liquidityResultFinal = liquidityEngine.run(propertyData, marketData, valuationResult.marketValue);
+    auditTrail.push({ engine: 'LiquidityEngine(final)', timestamp: new Date(), duration: liquidityResultFinal.duration, output: liquidityResultFinal });
+
+    // 4. Distress — needs liquidity score, market data (for yoy), and property age
+    const distressResult = distressEngine.run(
+      propertyData,
+      valuationResult.marketValue,
+      liquidityResultFinal.liquidityScore,
+      marketData,
+      valuationResult.propertyAge
+    );
     auditTrail.push({ engine: 'DistressEngine', timestamp: new Date(), duration: distressResult.duration, output: distressResult });
 
+    // 5. Risk — comprehensive regulatory checks
     const riskResult = riskEngine.run(propertyData, marketData, valuationResult, distressResult, comparables);
     auditTrail.push({ engine: 'RiskEngine', timestamp: new Date(), duration: riskResult.duration, output: riskResult });
 
-    const confidenceResult = confidenceEngine.run(propertyData, marketData, comparables, riskResult.riskScore);
+    // 6. Confidence — uses methodology from valuation engine
+    const confidenceResult = confidenceEngine.run(
+      propertyData,
+      marketData,
+      comparables,
+      riskResult.riskScore,
+      valuationResult.methodology
+    );
     auditTrail.push({ engine: 'ConfidenceEngine', timestamp: new Date(), duration: confidenceResult.duration, output: confidenceResult });
 
     const processingTime = Date.now() - globalStart;
+
+    // ── Service Layer (additive — does not modify engine outputs) ──
+
+    // Scenario simulation (optional input field)
+    const marketScenario = body.marketScenario || 'normal';
+    const scenarioResult = scenarioSimulator.run(
+      valuationResult.marketValue,
+      distressResult.distressValue,
+      marketScenario
+    );
+
+    // Decision engine
+    const decisionResult = decisionEngine.run({
+      confidenceScore: confidenceResult.confidenceScore,
+      riskScore: riskResult.riskScore,
+      overallRiskLabel: riskResult.overallRiskLabel,
+      redFlags: riskResult.redFlags,
+      liquidityScore: liquidityResultFinal.liquidityScore,
+      distressResult,
+      propertyType: propertyData.propertyType,
+      purpose: propertyData.purpose,
+    });
+
+    // Sanction engine
+    const sanctionResult = sanctionEngine.run({
+      distressValue: distressResult.distressValue,
+      marketValue: valuationResult.marketValue,
+      propertyType: propertyData.propertyType,
+      purpose: propertyData.purpose,
+      confidenceScore: confidenceResult.confidenceScore,
+      decision: decisionResult.decision,
+    });
+
+    // Audit engine
+    const auditEngineResult = auditEngine.run({
+      property: propertyData,
+      marketData,
+      valuationResult,
+      liquidityResult: liquidityResultFinal,
+      distressResult,
+      riskResult,
+      confidenceResult,
+      decisionResult,
+      sanctionResult,
+      comparables,
+      scenarioApplied: scenarioResult,
+    });
+
+    // Explanation engine
+    const explanationResult = explanationEngine.run({
+      property: propertyData,
+      marketData,
+      valuationResult,
+      liquidityResult: liquidityResultFinal,
+      distressResult,
+      riskResult,
+      confidenceResult,
+      decisionResult,
+      sanctionResult,
+      scenarioApplied: scenarioResult,
+    });
 
     // Build valuation document
     const valuation = new Valuation({
@@ -91,9 +185,9 @@ async function createValuation(req, res, next) {
       rbiErosionFlag: distressResult.rbiErosionFlag,
       liquidationTimeline: distressResult.liquidationTimeline,
       resaleRisk: distressResult.resaleRisk,
-      liquidityScore: liquidityResult.liquidityScore,
-      timeToSell: liquidityResult.timeToSell,
-      exitCertainty: liquidityResult.exitCertainty,
+      liquidityScore: liquidityResultFinal.liquidityScore,
+      timeToSell: liquidityResultFinal.timeToSell,
+      exitCertainty: liquidityResultFinal.exitCertainty,
       riskScore: riskResult.riskScore,
       redFlags: riskResult.redFlags,
       overallRiskLabel: riskResult.overallRiskLabel,
@@ -121,12 +215,26 @@ async function createValuation(req, res, next) {
           demandIndex: marketData.demandIndex,
           yoyAppreciation: marketData.yoyAppreciation,
         },
-        // Extras from engines
+        // Extras from engines (existing — unchanged)
         overCircleRatePercent: valuationResult.overCircleRatePercent,
         overPricedFlag: valuationResult.overPricedFlag,
         propertyAge: valuationResult.propertyAge,
         declaredVsMarketDeviation: riskResult.declaredVsMarketDeviation,
-        liquidityBreakdown: liquidityResult.breakdown,
+        liquidityBreakdown: liquidityResultFinal.breakdown,
+        valuationMethodology: valuationResult.methodology,
+        riskBreakdown: riskResult.riskBreakdown,
+        encumbrancePrior: riskResult.encumbrancePrior,
+        distressRegulatory: distressResult.regulatoryBasis,
+
+        // ── New service layer outputs ──────────────────────
+        decision: decisionResult.decision,
+        decisionDetail: decisionResult,
+        sanctionAmount: sanctionResult.sanctionAmount,
+        sanctionAmountFormatted: sanctionResult.sanctionAmountFormatted,
+        sanctionDetail: sanctionResult,
+        auditTrailEnhanced: auditEngineResult,
+        explanation: explanationResult,
+        scenario: scenarioResult,
       },
     });
   } catch (err) {

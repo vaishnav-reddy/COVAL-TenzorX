@@ -4,13 +4,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   Upload, MapPin, X, ChevronRight, Building2, Ruler,
-  Wrench, Layers, DollarSign, Target, ChevronLeft, ChevronDown, User, Mail, Phone, GripVertical
+  Wrench, Layers, DollarSign, Target, ChevronLeft, ChevronDown, User, TrendingUp, GripVertical, Sparkles
 } from 'lucide-react';
 import { MapView } from '../components/ui/MapView';
 import toast from 'react-hot-toast';
 import { createValuation, getCities, getCityLocalities } from '../utils/api';
 import { useValuation } from '../context/ValuationContext';
 import { EngineLoader } from '../components/ui/EngineLoader';
+import { DocumentUpload } from '../components/ui/DocumentUpload';
 
 const AMENITIES_LIST = ['Parking', 'Lift', 'Security', 'Gym', 'Swimming Pool', 'Power Backup', 'Garden', 'Club House', 'CCTV', 'Intercom'];
 
@@ -34,6 +35,7 @@ export default function PropertyForm() {
     constructionQuality: 'good',
     declaredValue: '',
     purpose: 'lap',
+    marketScenario: 'normal',
     applicantName: '',
     applicantEmail: '',
     applicantPhone: '',
@@ -41,6 +43,8 @@ export default function PropertyForm() {
     applicantOccupation: '',
   });
   const [selectedCity, setSelectedCity] = useState('');
+  // Tracks which fields were auto-filled and their confidence
+  const [fieldConfidence, setFieldConfidence] = useState<Record<string, 'high' | 'medium' | 'low'>>({});
 
   const { data: citiesData } = useQuery({ queryKey: ['cities'], queryFn: getCities });
   const { data: localitiesData } = useQuery({
@@ -74,6 +78,40 @@ export default function PropertyForm() {
     }));
   }
 
+  function handleExtracted(
+    fields: Record<string, unknown>,
+    confidenceMap: Record<string, { confidence: 'high' | 'medium' | 'low'; source: string }>
+  ) {
+    // Map extracted fields onto form state
+    setForm(f => ({
+      ...f,
+      ...(fields.propertyType ? { propertyType: fields.propertyType as string } : {}),
+      ...(fields.city ? { city: fields.city as string } : {}),
+      ...(fields.locality ? { locality: fields.locality as string } : {}),
+      ...(fields.pincode ? { pincode: fields.pincode as string } : {}),
+      ...(fields.area ? { area: String(fields.area) } : {}),
+      ...(fields.yearOfConstruction ? { yearOfConstruction: String(fields.yearOfConstruction) } : {}),
+      ...(fields.floorNumber !== undefined ? { floorNumber: String(fields.floorNumber) } : {}),
+      ...(fields.totalFloors ? { totalFloors: String(fields.totalFloors) } : {}),
+      ...(fields.constructionQuality ? { constructionQuality: fields.constructionQuality as string } : {}),
+      ...(fields.declaredValue ? { declaredValue: String(fields.declaredValue) } : {}),
+      ...(fields.applicantName ? { applicantName: fields.applicantName as string } : {}),
+      ...(fields.applicantPAN ? { applicantPAN: fields.applicantPAN as string } : {}),
+      ...(fields.applicantPhone ? { applicantPhone: fields.applicantPhone as string } : {}),
+      ...(fields.applicantEmail ? { applicantEmail: fields.applicantEmail as string } : {}),
+    }));
+
+    // If city was extracted, update selectedCity for locality dropdown
+    if (fields.city) setSelectedCity(fields.city as string);
+
+    // Store confidence per field for highlighting
+    const conf: Record<string, 'high' | 'medium' | 'low'> = {};
+    for (const [key, val] of Object.entries(confidenceMap)) {
+      conf[key] = val.confidence;
+    }
+    setFieldConfidence(conf);
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.city || !form.locality || !form.area || !form.declaredValue || !form.applicantName || !form.applicantEmail || !form.applicantPhone) {
@@ -89,6 +127,19 @@ export default function PropertyForm() {
 
   const inputClass = 'w-full bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-gray-800 text-sm focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 transition-colors placeholder:text-gray-400';
   const labelClass = 'block text-xs font-medium text-gray-500 mb-1.5';
+
+  // Returns extra border class based on OCR confidence for that field
+  function confidenceBorder(field: string) {
+    const c = fieldConfidence[field];
+    if (!c) return '';
+    if (c === 'high') return 'border-emerald-300 bg-emerald-50/30';
+    if (c === 'medium') return 'border-amber-300 bg-amber-50/30';
+    return 'border-red-300 bg-red-50/30';
+  }
+
+  function inputCls(field: string) {
+    return `${inputClass} ${confidenceBorder(field)}`;
+  }
 
   // Handle resizable panel
   const handleMouseDown = () => {
@@ -171,7 +222,7 @@ export default function PropertyForm() {
                     <div>
                       <label className={labelClass}>City *</label>
                       <select
-                        className={inputClass}
+                        className={inputCls('city')}
                         value={form.city}
                         onChange={(e) => {
                           setForm((f) => ({ ...f, city: e.target.value, locality: '' }));
@@ -185,7 +236,7 @@ export default function PropertyForm() {
                     <div>
                       <label className={labelClass}>Locality *</label>
                       <select
-                        className={inputClass}
+                        className={inputCls('locality')}
                         value={form.locality}
                         onChange={(e) => setForm((f) => ({ ...f, locality: e.target.value }))}
                         disabled={!form.city}
@@ -196,7 +247,7 @@ export default function PropertyForm() {
                     </div>
                     <div className="col-span-2">
                       <label className={labelClass}>Pincode</label>
-                      <input className={inputClass} value={form.pincode} onChange={(e) => setForm((f) => ({ ...f, pincode: e.target.value }))} placeholder="e.g. 400001" />
+                      <input className={inputCls('pincode')} value={form.pincode} onChange={(e) => setForm((f) => ({ ...f, pincode: e.target.value }))} placeholder="e.g. 400001" />
                     </div>
                   </div>
                 </Section>
@@ -206,19 +257,19 @@ export default function PropertyForm() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className={labelClass}>Area (sq ft) *</label>
-                      <input type="number" className={inputClass} value={form.area} onChange={(e) => setForm((f) => ({ ...f, area: e.target.value }))} placeholder="e.g. 1200" />
+                      <input type="number" className={inputCls('area')} value={form.area} onChange={(e) => setForm((f) => ({ ...f, area: e.target.value }))} placeholder="e.g. 1200" />
                     </div>
                     <div>
                       <label className={labelClass}>Year Built</label>
-                      <input type="number" className={inputClass} value={form.yearOfConstruction} onChange={(e) => setForm((f) => ({ ...f, yearOfConstruction: e.target.value }))} placeholder="e.g. 2010" />
+                      <input type="number" className={inputCls('yearOfConstruction')} value={form.yearOfConstruction} onChange={(e) => setForm((f) => ({ ...f, yearOfConstruction: e.target.value }))} placeholder="e.g. 2010" />
                     </div>
                     <div>
                       <label className={labelClass}>Floor No.</label>
-                      <input type="number" className={inputClass} value={form.floorNumber} onChange={(e) => setForm((f) => ({ ...f, floorNumber: e.target.value }))} placeholder="e.g. 3" />
+                      <input type="number" className={inputCls('floorNumber')} value={form.floorNumber} onChange={(e) => setForm((f) => ({ ...f, floorNumber: e.target.value }))} placeholder="e.g. 3" />
                     </div>
                     <div>
                       <label className={labelClass}>Total Floors</label>
-                      <input type="number" className={inputClass} value={form.totalFloors} onChange={(e) => setForm((f) => ({ ...f, totalFloors: e.target.value }))} placeholder="e.g. 10" />
+                      <input type="number" className={inputCls('totalFloors')} value={form.totalFloors} onChange={(e) => setForm((f) => ({ ...f, totalFloors: e.target.value }))} placeholder="e.g. 10" />
                     </div>
                   </div>
                 </Section>
@@ -269,7 +320,7 @@ export default function PropertyForm() {
                   <label className={labelClass}>Value declared by borrower (₹) *</label>
                   <input
                     type="number"
-                    className={inputClass}
+                    className={inputCls('declaredValue')}
                     value={form.declaredValue}
                     onChange={(e) => setForm((f) => ({ ...f, declaredValue: e.target.value }))}
                     placeholder="e.g. 8500000"
@@ -290,7 +341,7 @@ export default function PropertyForm() {
                       <label className={labelClass}>Full Name *</label>
                       <input
                         type="text"
-                        className={inputClass}
+                        className={inputCls('applicantName')}
                         value={form.applicantName}
                         onChange={(e) => setForm((f) => ({ ...f, applicantName: e.target.value }))}
                         placeholder="e.g. John Doe"
@@ -300,7 +351,7 @@ export default function PropertyForm() {
                       <label className={labelClass}>Email *</label>
                       <input
                         type="email"
-                        className={inputClass}
+                        className={inputCls('applicantEmail')}
                         value={form.applicantEmail}
                         onChange={(e) => setForm((f) => ({ ...f, applicantEmail: e.target.value }))}
                         placeholder="e.g. john@example.com"
@@ -310,7 +361,7 @@ export default function PropertyForm() {
                       <label className={labelClass}>Phone *</label>
                       <input
                         type="tel"
-                        className={inputClass}
+                        className={inputCls('applicantPhone')}
                         value={form.applicantPhone}
                         onChange={(e) => setForm((f) => ({ ...f, applicantPhone: e.target.value }))}
                         placeholder="e.g. 9876543210"
@@ -320,7 +371,7 @@ export default function PropertyForm() {
                       <label className={labelClass}>PAN</label>
                       <input
                         type="text"
-                        className={inputClass}
+                        className={inputCls('applicantPAN')}
                         value={form.applicantPAN}
                         onChange={(e) => setForm((f) => ({ ...f, applicantPAN: e.target.value }))}
                         placeholder="e.g. ABCDE1234F"
@@ -345,12 +396,17 @@ export default function PropertyForm() {
                   </div>
                 </Section>
 
-                {/* Upload */}
-                <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center hover:border-indigo-300 transition-colors cursor-pointer">
-                  <Upload className="w-5 h-5 mx-auto mb-1.5 text-gray-300" />
-                  <p className="text-xs text-gray-400">Drag & drop property images</p>
-                  <p className="text-[10px] text-gray-300 mt-0.5">JPG, PNG up to 10MB (optional)</p>
-                </div>
+                {/* Document Auto-fill */}
+                <Section icon={<Sparkles className="w-4 h-4 text-indigo-500" />} title="Auto-fill from Document">
+                  <DocumentUpload onExtracted={handleExtracted} />
+                  {Object.keys(fieldConfidence).length > 0 && (
+                    <div className="mt-2 flex items-center gap-3 text-[10px] text-gray-400">
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" /> Auto-filled (verified)</span>
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block" /> Review needed</span>
+                      <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400 inline-block" /> Uncertain</span>
+                    </div>
+                  )}
+                </Section>
 
                 <motion.button
                   type="submit"

@@ -35,4 +35,13 @@ export const generateReport = async (id: string) => {
   return res.data;
 };
 
+export const extractDocument = async (file: File) => {
+  const formData = new FormData();
+  formData.append('document', file);
+  const res = await api.post('/documents/extract', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return res.data;
+};
+
 export default api;

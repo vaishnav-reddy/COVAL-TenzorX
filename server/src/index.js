@@ -8,6 +8,7 @@ const mongoose = require('mongoose');
 const valuationRoutes = require('./routes/valuations');
 const marketDataRoutes = require('./routes/marketData');
 const healthRoute = require('./routes/health');
+const documentRoutes = require('./routes/documents');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -21,6 +22,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use('/api/health', healthRoute);
 app.use('/api/valuations', valuationRoutes);
 app.use('/api/market-data', marketDataRoutes);
+app.use('/api/documents', documentRoutes);
 
 app.use(errorHandler);
 
