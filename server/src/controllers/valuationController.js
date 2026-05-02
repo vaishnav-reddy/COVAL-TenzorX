@@ -25,10 +25,12 @@ async function createValuation(req, res, next) {
     // Normalize
     const propertyData = {
       propertyType: body.propertyType?.toLowerCase(),
+      propertySubType: body.propertySubType || null,
       city: body.city,
       locality: body.locality,
       pincode: body.pincode,
       area: parseFloat(body.area),
+      areaType: body.areaType || 'builtup',
       yearOfConstruction: body.yearOfConstruction ? parseInt(body.yearOfConstruction) : null,
       floorNumber: body.floorNumber !== undefined ? parseInt(body.floorNumber) : 0,
       totalFloors: body.totalFloors ? parseInt(body.totalFloors) : 1,
@@ -36,6 +38,11 @@ async function createValuation(req, res, next) {
       constructionQuality: body.constructionQuality?.toLowerCase() || 'good',
       declaredValue: parseFloat(body.declaredValue),
       purpose: body.purpose || 'lap',
+      ownershipType: body.ownershipType || 'freehold',
+      titleClarity: body.titleClarity || 'clear',
+      occupancyStatus: body.occupancyStatus || 'self_occupied',
+      monthlyRent: body.monthlyRent ? parseFloat(body.monthlyRent) : null,
+      marketScenario: body.marketScenario || 'normal',
       images: body.images || [],
     };
 

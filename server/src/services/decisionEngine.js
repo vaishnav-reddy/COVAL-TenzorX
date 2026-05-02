@@ -42,6 +42,7 @@ const HARD_REJECT_CODES = new Set([
   'BELOW_CIRCLE_RATE',            // stamp duty evasion (illegal)
   'FALLING_MARKET',               // market in decline (RBI stress test)
   'STRUCTURAL_RISK_CRITICAL',     // <25% residual life (NHB)
+  'TITLE_UNDER_LITIGATION',       // active litigation — cannot lend (PS requirement)
 ]);
 
 /* ─────────────────────────────────────────────────────────────

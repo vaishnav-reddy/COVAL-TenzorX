@@ -425,6 +425,54 @@ function analyseDataQuality(propertyCount) {
 }
 
 /* ─────────────────────────────────────────────────────────────
+   SECTION L: LEGAL & OWNERSHIP RISK (PS requirement)
+   Leasehold: financing harder, fewer buyers, lower LTV
+   Disputed title: PMLA / legal risk
+   Litigation: hard reject territory
+   Vacant property: higher risk of deterioration / squatting
+───────────────────────────────────────────────────────────── */
+function analyseLegalOwnership(property) {
+  const flags = [];
+  let score = 0;
+
+  if (property.titleClarity === 'litigation') {
+    flags.push({
+      code: 'TITLE_UNDER_LITIGATION',
+      message: 'Property title is under active litigation — lending against this collateral is not advisable until legal resolution',
+      severity: 'critical',
+    });
+    score += 30;
+  } else if (property.titleClarity === 'disputed') {
+    flags.push({
+      code: 'TITLE_DISPUTED',
+      message: 'Property title is disputed — legal verification and title insurance mandatory before disbursement',
+      severity: 'medium',
+    });
+    score += 15;
+  }
+
+  if (property.ownershipType === 'leasehold') {
+    flags.push({
+      code: 'LEASEHOLD_PROPERTY',
+      message: 'Leasehold property — LTV should be reduced by 10–15%, fewer buyers in secondary market, financing constraints apply',
+      severity: 'medium',
+    });
+    score += 10;
+  }
+
+  if (property.occupancyStatus === 'vacant') {
+    flags.push({
+      code: 'VACANT_PROPERTY',
+      message: 'Property is vacant — higher risk of deterioration, squatting, and reduced resale velocity',
+      severity: 'low',
+    });
+    score += 5;
+  }
+
+  return { flags, score };
+}
+
+/* ─────────────────────────────────────────────────────────────
    MAIN RUN FUNCTION
 ───────────────────────────────────────────────────────────── */
 function run(property, marketData, valuationResult, distressResult, comparables) {
@@ -474,6 +522,11 @@ function run(property, marketData, valuationResult, distressResult, comparables)
   redFlags.push(...dataResult.flags);
   riskScore += dataResult.score;
 
+  // New: legal & ownership checks (PS requirement)
+  const legalResult = analyseLegalOwnership(property);
+  redFlags.push(...legalResult.flags);
+  riskScore += legalResult.score;
+
   riskScore = Math.min(riskScore, 100);
 
   // Risk label thresholds (RBI NPA classification inspired)
@@ -500,6 +553,7 @@ function run(property, marketData, valuationResult, distressResult, comparables)
       marketConditionRisk: marketResult.score,
       compDeviationRisk: compResult.score,
       dataQualityRisk: dataResult.score,
+      legalOwnershipRisk: legalResult.score,
     },
   };
 }

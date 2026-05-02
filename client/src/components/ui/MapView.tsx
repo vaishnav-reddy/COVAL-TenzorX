@@ -15,9 +15,11 @@ interface SearchResult {
 export interface MapViewProps {
   onLocationConfirm?: (location: { lat: number; lng: number; placeName: string }) => void;
   searchLocation?: string;
+  /** Parent calls this with a resize fn so it can trigger map.resize() on panel width change */
+  onResizeReady?: (resizeFn: () => void) => void;
 }
 
-export function MapView({ onLocationConfirm, searchLocation }: MapViewProps) {
+export function MapView({ onLocationConfirm, searchLocation, onResizeReady }: MapViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markerRef = useRef<mapboxgl.Marker | null>(null);
@@ -84,10 +86,13 @@ export function MapView({ onLocationConfirm, searchLocation }: MapViewProps) {
       zoom: 3,
       pitch: 45,
       bearing: -17.6,
-      projection: 'globe' // Globe view
+      projection: 'globe'
     });
 
-    // Add navigation controls for configurable pitch, zoom, and rotation
+    // Expose resize fn to parent so it can call map.resize() when panel width changes
+    onResizeReady?.(() => map.resize());
+
+    // Add navigation controls
     map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), 'bottom-right');
 
     map.on('style.load', () => {
@@ -299,9 +304,9 @@ export function MapView({ onLocationConfirm, searchLocation }: MapViewProps) {
   }
 
   return (
-    <div className="flex flex-col h-full relative">
-      {/* Search and Controls */}
-      <div className="absolute top-4 left-4 right-14 z-20 flex flex-col gap-2 pointer-events-none">
+    <div className="relative w-full h-full overflow-hidden bg-[#E5E5E5]">
+      {/* Search and Controls — float above map */}
+      <div className="absolute top-4 left-4 right-16 z-20 flex flex-col gap-2 pointer-events-none">
         <div className="flex gap-2 pointer-events-auto">
           <div className="flex-1 relative">
             <div className="flex items-center gap-2 bg-white/95 backdrop-blur-md border border-gray-200 rounded-xl px-4 py-3 shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
@@ -315,7 +320,7 @@ export function MapView({ onLocationConfirm, searchLocation }: MapViewProps) {
                 onChange={(e) => handleManualSearch(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearchEnter()}
                 placeholder={searchLocation ? `Showing: ${searchLocation}` : 'Search any property location...'}
-                className="flex-1 text-[13px] font-semibold text-gray-900 placeholder:text-gray-400 placeholder:font-medium bg-transparent focus:outline-none"
+                className="flex-1 text-[13px] font-semibold text-gray-900 placeholder:text-gray-400 placeholder:font-medium bg-transparent focus:outline-none min-w-0"
               />
               {manualQuery && (
                 <button onClick={() => { setManualQuery(''); setSuggestions([]); }}>
@@ -339,7 +344,7 @@ export function MapView({ onLocationConfirm, searchLocation }: MapViewProps) {
               </div>
             )}
           </div>
-          
+
           {/* Theme Toggles */}
           <div className="flex flex-col gap-1 bg-white/95 backdrop-blur-md border border-gray-200 rounded-xl p-1.5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] shrink-0">
             <button
@@ -365,7 +370,7 @@ export function MapView({ onLocationConfirm, searchLocation }: MapViewProps) {
             </button>
           </div>
         </div>
-        
+
         {autoLocating && (
           <div className="bg-[#111] text-white shadow-lg rounded-xl px-4 py-2.5 self-start flex items-center gap-2 pointer-events-auto">
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -374,37 +379,36 @@ export function MapView({ onLocationConfirm, searchLocation }: MapViewProps) {
         )}
       </div>
 
-      {/* Map container */}
-      <div className="flex-1 relative bg-[#E5E5E5]">
-        <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
+      {/* Map canvas — fills entire panel */}
+      <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
 
-        {showPopup && markerCoords && (
-          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white/95 backdrop-blur-xl rounded-2xl shadow-[0_20px_60px_rgb(0,0,0,0.2)] p-5 w-80 z-[1000] border border-gray-100 animate-in slide-in-from-bottom-4 fade-in duration-300">
-            <button onClick={() => setShowPopup(false)} className="absolute top-4 right-4 text-gray-400 hover:text-[#111] transition-colors">
-              <X className="w-4 h-4" />
-            </button>
-            <div className="flex items-start gap-3 mb-5 pr-6">
-              <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 border border-gray-200">
-                 <MapPin className="w-4 h-4 text-[#111]" />
-              </div>
-              <div>
-                <p className="text-[13px] font-bold text-gray-900 leading-snug line-clamp-2">
-                  {selectedPlace || 'Selected property'}
-                </p>
-                <p className="text-[11px] font-medium text-gray-500 mt-1 uppercase tracking-wide">
-                  {markerCoords.lat.toFixed(5)}, {markerCoords.lng.toFixed(5)}
-                </p>
-              </div>
+      {/* Location confirm popup */}
+      {showPopup && markerCoords && (
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white/95 backdrop-blur-xl rounded-2xl shadow-[0_20px_60px_rgb(0,0,0,0.2)] p-5 w-80 z-[1000] border border-gray-100 animate-in slide-in-from-bottom-4 fade-in duration-300">
+          <button onClick={() => setShowPopup(false)} className="absolute top-4 right-4 text-gray-400 hover:text-[#111] transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+          <div className="flex items-start gap-3 mb-5 pr-6">
+            <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 border border-gray-200">
+              <MapPin className="w-4 h-4 text-[#111]" />
             </div>
-            <button
-              onClick={handleConfirm}
-              className="w-full py-3 bg-[#111] hover:bg-black text-white text-[13px] font-bold rounded-xl transition-all shadow-[0_4px_12px_rgba(0,0,0,0.1)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.2)]"
-            >
-              Confirm Boundary
-            </button>
+            <div>
+              <p className="text-[13px] font-bold text-gray-900 leading-snug line-clamp-2">
+                {selectedPlace || 'Selected property'}
+              </p>
+              <p className="text-[11px] font-medium text-gray-500 mt-1 uppercase tracking-wide">
+                {markerCoords.lat.toFixed(5)}, {markerCoords.lng.toFixed(5)}
+              </p>
+            </div>
           </div>
-        )}
-      </div>
+          <button
+            onClick={handleConfirm}
+            className="w-full py-3 bg-[#111] hover:bg-black text-white text-[13px] font-bold rounded-xl transition-all shadow-[0_4px_12px_rgba(0,0,0,0.1)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.2)]"
+          >
+            Confirm Boundary
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -5,13 +5,20 @@ export type RiskLabel = 'safe' | 'caution' | 'high_risk';
 export type ExitCertainty = 'high' | 'medium' | 'low';
 export type ResaleRisk = 'low' | 'medium' | 'high';
 export type FlagSeverity = 'low' | 'medium' | 'critical';
+export type OwnershipType = 'freehold' | 'leasehold';
+export type TitleClarity = 'clear' | 'disputed' | 'litigation';
+export type OccupancyStatus = 'self_occupied' | 'rented' | 'vacant';
+export type AreaType = 'carpet' | 'builtup' | 'superbuiltup';
+export type MarketScenario = 'normal' | 'growth' | 'crash';
 
 export interface PropertyInput {
   propertyType: PropertyType;
+  propertySubType?: string;
   city: string;
   locality: string;
   pincode?: string;
   area: number;
+  areaType?: AreaType;
   yearOfConstruction?: number;
   floorNumber?: number;
   totalFloors?: number;
@@ -19,6 +26,11 @@ export interface PropertyInput {
   constructionQuality: ConstructionQuality;
   declaredValue: number;
   purpose: Purpose;
+  ownershipType?: OwnershipType;
+  titleClarity?: TitleClarity;
+  occupancyStatus?: OccupancyStatus;
+  monthlyRent?: number;
+  marketScenario?: MarketScenario;
 }
 
 export interface RedFlag {

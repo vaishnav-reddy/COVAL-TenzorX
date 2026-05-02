@@ -117,12 +117,17 @@ export default function FullReport() {
           <Section title="4. Property Details">
             <div className="space-y-1">
               <Row label="Property Type" value={<span className="capitalize">{p?.propertyType}</span>} />
-              <Row label="Total Area" value={`${p?.area?.toLocaleString('en-IN')} sq ft`} />
+              {p?.propertySubType && <Row label="Sub-type" value={p.propertySubType} />}
+              <Row label="Total Area" value={`${p?.area?.toLocaleString('en-IN')} sq ft${p?.areaType ? ` (${p.areaType === 'builtup' ? 'Built-up' : p.areaType === 'carpet' ? 'Carpet' : 'Super Built-up'})` : ''}`} />
               <Row label="Year of Construction" value={p?.yearOfConstruction || 'N/A'} />
               <Row label="Property Age" value={v.propertyAge !== null ? `${v.propertyAge} years` : 'N/A'} />
               <Row label="Floor" value={`${p?.floorNumber ?? 'G'} / ${p?.totalFloors ?? 'N/A'}`} />
               <Row label="Construction Quality" value={<span className="capitalize">{p?.constructionQuality}</span>} />
               <Row label="Amenities" value={p?.amenities?.join(', ') || 'None'} />
+              <Row label="Ownership Type" value={<span className="capitalize">{(p as any)?.ownershipType || 'Freehold'}</span>} />
+              <Row label="Title Status" value={<span className="capitalize">{(p as any)?.titleClarity || 'Clear'}</span>} />
+              <Row label="Occupancy" value={<span className="capitalize">{((p as any)?.occupancyStatus || 'self_occupied').replace('_', ' ')}</span>} />
+              {(p as any)?.monthlyRent && <Row label="Monthly Rent" value={`₹${Number((p as any).monthlyRent).toLocaleString('en-IN')}`} />}
               <Row label="Purpose" value={p?.purpose?.toUpperCase()} />
               <Row label="Declared Value" value={formatCurrency(p?.declaredValue || 0)} />
             </div>

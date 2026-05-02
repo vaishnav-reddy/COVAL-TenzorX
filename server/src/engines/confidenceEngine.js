@@ -47,6 +47,11 @@ function getDataCompleteness(property) {
     { value: property.yearOfConstruction, weight: 2 },
     { value: property.constructionQuality, weight: 2 },
     { value: property.purpose, weight: 2 },
+    // New PS fields — weight 2 each (improve completeness score)
+    { value: property.ownershipType, weight: 2 },
+    { value: property.titleClarity, weight: 2 },
+    { value: property.occupancyStatus, weight: 2 },
+    { value: property.propertySubType, weight: 1 },
     // Supplementary — weight 1 each
     { value: property.floorNumber !== undefined && property.floorNumber !== null, weight: 1 },
     { value: property.totalFloors && property.totalFloors > 0, weight: 1 },

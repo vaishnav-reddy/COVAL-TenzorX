@@ -355,6 +355,15 @@ export default function ValuationDashboard() {
             <span>Circle Rate: ₹{valuation.marketData.circleRate?.toLocaleString('en-IN')}/sqft</span>
             <span>Demand Index: {valuation.marketData.demandIndex}/10</span>
             <span className="text-emerald-600">YoY Appreciation: +{valuation.marketData.yoyAppreciation}%</span>
+            {valuation.propertySnapshot?.ownershipType && (
+              <span className="capitalize">🏛️ {(valuation.propertySnapshot as any).ownershipType}</span>
+            )}
+            {valuation.propertySnapshot?.occupancyStatus && (
+              <span className="capitalize">🏠 {((valuation.propertySnapshot as any).occupancyStatus as string).replace('_', ' ')}</span>
+            )}
+            {(valuation.propertySnapshot as any)?.titleClarity && (valuation.propertySnapshot as any).titleClarity !== 'clear' && (
+              <span className="text-amber-600 font-medium capitalize">⚠️ Title: {(valuation.propertySnapshot as any).titleClarity}</span>
+            )}
           </div>
         )}
 

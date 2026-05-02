@@ -224,6 +224,30 @@ function getTimeToSell(score, propertyType) {
 }
 
 /* ─────────────────────────────────────────────────────────────
+   SECTION I2: OCCUPANCY & OWNERSHIP ADJUSTMENTS (PS requirement)
+   Rented property: investors attracted by yield → +liquidity
+   Vacant property: no income, harder to sell → -liquidity
+   Leasehold: fewer buyers, financing harder → -liquidity
+   Disputed/litigation title: almost unsellable → major penalty
+───────────────────────────────────────────────────────────── */
+function getOwnershipLiquidityAdj(property) {
+  let adj = 0;
+
+  // Occupancy
+  if (property.occupancyStatus === 'rented' && property.monthlyRent > 0) adj += 6;
+  else if (property.occupancyStatus === 'vacant') adj -= 8;
+
+  // Ownership type
+  if (property.ownershipType === 'leasehold') adj -= 10;
+
+  // Title clarity
+  if (property.titleClarity === 'litigation') adj -= 20;
+  else if (property.titleClarity === 'disputed') adj -= 12;
+
+  return adj;
+}
+
+/* ─────────────────────────────────────────────────────────────
    MAIN RUN FUNCTION
    Weighted formula:
    liquidityScore =
@@ -258,7 +282,7 @@ function run(property, marketData, marketValue = null) {
     floorScore         * 0.08 +
     amenitiesScore     * 0.07;
 
-  const liquidityScore = Math.min(Math.max(Math.round(rawScore + priceAdj), 1), 100);
+  const liquidityScore = Math.min(Math.max(Math.round(rawScore + priceAdj + getOwnershipLiquidityAdj(property)), 1), 100);
 
   const timeToSell = getTimeToSell(liquidityScore, propertyType);
   const exitCertainty = getExitCertainty(liquidityScore);

@@ -44,4 +44,13 @@ export const extractDocument = async (file: File) => {
   return res.data;
 };
 
+export const extractDocuments = async (files: File[]) => {
+  const formData = new FormData();
+  for (const file of files) formData.append('documents', file);
+  const res = await api.post('/documents/extract-multi', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return res.data;
+};
+
 export default api;

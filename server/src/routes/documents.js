@@ -5,7 +5,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const os = require('os');
-const { extractDocument } = require('../controllers/documentController');
+const { extractDocument, extractDocuments } = require('../controllers/documentController');
 
 // Store uploads in OS temp dir — cleaned up after processing
 const storage = multer.diskStorage({
@@ -40,7 +40,10 @@ const upload = multer({
   },
 });
 
-// POST /api/documents/extract
+// POST /api/documents/extract  (single file — legacy)
 router.post('/extract', upload.single('document'), extractDocument);
+
+// POST /api/documents/extract-multi  (up to 5 files, merged result)
+router.post('/extract-multi', upload.array('documents', 5), extractDocuments);
 
 module.exports = router;
