@@ -20,18 +20,12 @@ from field_extractor import LandFieldExtractor
 from ocr_engine import LandRecordOCREngine
 from pdf_processor import PDFProcessor
 
-# ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("land_ocr")
 
-# ---------------------------------------------------------------------------
-# App setup
-# ---------------------------------------------------------------------------
 app = FastAPI(
     title="Land Record OCR API",
     description="AI-powered OCR extraction for Indian land records (Khatauni, 7/12, Jamabandi, etc.)",
@@ -46,13 +40,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------------------------------------------------------------------------
-# Singletons (lazy-initialized on first request)
-# ---------------------------------------------------------------------------
 _ocr_engine: Optional[LandRecordOCREngine] = None
 _field_extractor: Optional[LandFieldExtractor] = None
-
-# Simple in-memory cache: {file_hash: response_dict}
 _result_cache: Dict[str, Dict] = {}
 
 MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
@@ -72,10 +61,6 @@ def get_field_extractor() -> LandFieldExtractor:
         _field_extractor = LandFieldExtractor()
     return _field_extractor
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _file_hash(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
@@ -98,7 +83,6 @@ def _validate_file(file: UploadFile, data: bytes):
 
 
 def _save_temp(data: bytes, suffix: str) -> str:
-    """Save bytes to a temp file and return its path."""
     fd, path = tempfile.mkstemp(suffix=suffix)
     with os.fdopen(fd, "wb") as f:
         f.write(data)
@@ -106,16 +90,10 @@ def _save_temp(data: bytes, suffix: str) -> str:
 
 
 async def _process_single_file(file: UploadFile) -> Dict[str, Any]:
-    """
-    Full pipeline for one file:
-    PDF → images → OCR → field extraction → response dict
-    """
     data = await file.read()
     _validate_file(file, data)
 
     file_hash = _file_hash(data)
-
-    # Cache hit
     if file_hash in _result_cache:
         logger.info(f"Cache hit for {file.filename} ({file_hash[:8]})")
         cached = dict(_result_cache[file_hash])
@@ -130,7 +108,6 @@ async def _process_single_file(file: UploadFile) -> Dict[str, Any]:
         global_start = time.time()
         warnings: List[str] = []
 
-        # ── Stage 1: PDF → images ────────────────────────────────────
         stage_start = time.time()
         logger.info(f"[Stage 1] Converting '{file.filename}' to images...")
         try:
@@ -141,7 +118,6 @@ async def _process_single_file(file: UploadFile) -> Dict[str, Any]:
         pages_processed = len(image_paths)
         logger.info(f"[Stage 1] Done — {pages_processed} page(s) in {time.time()-stage_start:.2f}s")
 
-        # ── Stage 2: OCR ─────────────────────────────────────────────
         stage_start = time.time()
         logger.info("[Stage 2] Running PaddleOCR PP-OCRv5...")
         engine = get_ocr_engine()
@@ -167,7 +143,6 @@ async def _process_single_file(file: UploadFile) -> Dict[str, Any]:
         if not combined_text.strip():
             warnings.append("No text extracted — document may be blank or heavily degraded.")
 
-        # ── Stage 3: Field extraction ─────────────────────────────────
         stage_start = time.time()
         logger.info("[Stage 3] Extracting land record fields...")
         merged_ocr = {
@@ -180,29 +155,22 @@ async def _process_single_file(file: UploadFile) -> Dict[str, Any]:
         doc_type = extractor.detect_document_type(combined_text)
         logger.info(f"[Stage 3] Done in {time.time()-stage_start:.2f}s — doc type: {doc_type}")
 
-        # ── Stage 4: Confidence score ─────────────────────────────────
         stage_start = time.time()
         logger.info("[Stage 4] Calculating confidence score...")
         confidence_score = extractor.calculate_confidence_score(extracted)
         logger.info(f"[Stage 4] Confidence: {confidence_score}/100 in {time.time()-stage_start:.2f}s")
 
         if confidence_score < 50:
-            warnings.append(
-                "Low confidence score — consider uploading a higher-resolution scan."
-            )
+            warnings.append("Low confidence score — consider uploading a higher-resolution scan.")
 
-        # ── Build response ────────────────────────────────────────────
         processing_time_ms = round((time.time() - global_start) * 1000)
 
-        # Restructure extracted fields into the specified response format
         location = {
             "district": extracted.get("district"),
             "tehsil": extracted.get("tehsil"),
             "village": extracted.get("village"),
             "state": extracted.get("state"),
         }
-
-        land_area = extracted.get("land_area")
 
         response = {
             "status": "success",
@@ -214,7 +182,7 @@ async def _process_single_file(file: UploadFile) -> Dict[str, Any]:
                 "survey_no": extracted.get("survey_no"),
                 "owner_name": extracted.get("owner_name"),
                 "co_owner": extracted.get("co_owner_name"),
-                "land_area": land_area,
+                "land_area": extracted.get("land_area"),
                 "khasra_no": extracted.get("khasra_no"),
                 "khata_no": extracted.get("khata_no"),
                 "land_type": extracted.get("land_type"),
@@ -229,7 +197,6 @@ async def _process_single_file(file: UploadFile) -> Dict[str, Any]:
             "cached": False,
         }
 
-        # Store in cache
         _result_cache[file_hash] = response
         return response
 
@@ -239,16 +206,9 @@ async def _process_single_file(file: UploadFile) -> Dict[str, Any]:
             os.remove(tmp_path)
 
 
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
-
 @app.post("/ocr/upload")
 async def upload_document(file: UploadFile = File(...)):
-    """
-    Process a single land record document (PDF, PNG, JPG, TIFF).
-    Max file size: 10MB.
-    """
+    """Process a single land record document (PDF, PNG, JPG, TIFF). Max 10MB."""
     try:
         result = await _process_single_file(file)
         return JSONResponse(content=result, status_code=200)
@@ -261,10 +221,7 @@ async def upload_document(file: UploadFile = File(...)):
 
 @app.post("/ocr/batch")
 async def batch_upload(files: List[UploadFile] = File(...)):
-    """
-    Process up to 10 land record documents in sequence.
-    Returns an array of results (one per file).
-    """
+    """Process up to 10 land record documents in sequence."""
     if len(files) > 10:
         raise HTTPException(
             status_code=400,
@@ -284,18 +241,13 @@ async def batch_upload(files: List[UploadFile] = File(...)):
                 "status_code": e.status_code,
             })
         except Exception as e:
-            results.append({
-                "status": "error",
-                "filename": file.filename,
-                "error": str(e),
-            })
+            results.append({"status": "error", "filename": file.filename, "error": str(e)})
 
     return JSONResponse(content={"results": results, "total": len(results)})
 
 
 @app.get("/ocr/health")
 async def health_check():
-    """Returns engine status and model info."""
     engine = get_ocr_engine()
     return {
         "status": "healthy",
@@ -308,73 +260,24 @@ async def health_check():
 
 @app.get("/ocr/supported-documents")
 async def supported_documents():
-    """Returns list of supported document types and which Indian states use them."""
     return {
         "document_types": [
-            {
-                "type": "7/12",
-                "name": "Satbara Utara",
-                "states": ["Maharashtra", "Gujarat"],
-                "description": "Record of Rights and Cultivation details",
-            },
-            {
-                "type": "ROR",
-                "name": "Record of Rights",
-                "states": ["All states"],
-                "description": "Ownership and tenancy rights document",
-            },
-            {
-                "type": "Khatauni",
-                "name": "Khatauni / Khatian",
-                "states": ["Uttar Pradesh", "Bihar", "Jharkhand", "West Bengal"],
-                "description": "Land ownership register with survey numbers",
-            },
-            {
-                "type": "Patta",
-                "name": "Patta / Chitta",
-                "states": ["Tamil Nadu", "Andhra Pradesh", "Telangana", "Karnataka"],
-                "description": "Land ownership certificate issued by government",
-            },
-            {
-                "type": "Jamabandi",
-                "name": "Jamabandi / Fard",
-                "states": ["Punjab", "Haryana", "Himachal Pradesh", "Rajasthan"],
-                "description": "Annual record of land rights and cultivation",
-            },
-            {
-                "type": "Adangal",
-                "name": "Adangal / 1-B",
-                "states": ["Andhra Pradesh", "Telangana"],
-                "description": "Village account of land cultivation",
-            },
-            {
-                "type": "RTC",
-                "name": "Rights Tenancy Crops (RTC)",
-                "states": ["Karnataka"],
-                "description": "Record of Rights, Tenancy and Crops",
-            },
-            {
-                "type": "EC",
-                "name": "Encumbrance Certificate",
-                "states": ["All states"],
-                "description": "Certificate showing property is free of legal dues",
-            },
-            {
-                "type": "MutationOrder",
-                "name": "Mutation / Dakhil Kharij Order",
-                "states": ["All states"],
-                "description": "Order for transfer of land ownership in records",
-            },
+            {"type": "7/12",          "name": "Satbara Utara",              "states": ["Maharashtra", "Gujarat"]},
+            {"type": "ROR",           "name": "Record of Rights",           "states": ["All states"]},
+            {"type": "Khatauni",      "name": "Khatauni / Khatian",         "states": ["Uttar Pradesh", "Bihar", "Jharkhand", "West Bengal"]},
+            {"type": "Patta",         "name": "Patta / Chitta",             "states": ["Tamil Nadu", "Andhra Pradesh", "Telangana", "Karnataka"]},
+            {"type": "Jamabandi",     "name": "Jamabandi / Fard",           "states": ["Punjab", "Haryana", "Himachal Pradesh", "Rajasthan"]},
+            {"type": "Adangal",       "name": "Adangal / 1-B",              "states": ["Andhra Pradesh", "Telangana"]},
+            {"type": "RTC",           "name": "Rights Tenancy Crops (RTC)", "states": ["Karnataka"]},
+            {"type": "EC",            "name": "Encumbrance Certificate",    "states": ["All states"]},
+            {"type": "MutationOrder", "name": "Mutation / Dakhil Kharij",   "states": ["All states"]},
         ]
     }
 
 
 @app.get("/demo")
 async def demo_data():
-    """
-    Returns 3 hardcoded sample extraction results for UI demo/testing
-    without needing a real document upload.
-    """
+    """Returns 3 hardcoded sample extraction results for UI demo/testing."""
     return {
         "samples": [
             {
@@ -388,27 +291,15 @@ async def demo_data():
                     "survey_no": "124/2",
                     "owner_name": "राम प्रसाद सिंह",
                     "co_owner": "सुमन देवी",
-                    "land_area": {
-                        "hectare": 1.245,
-                        "bigha": 4.924,
-                        "acre": 3.076,
-                        "guntha": 12.302,
-                        "cent": 122.5,
-                    },
+                    "land_area": {"hectare": 1.245, "bigha": 4.924, "acre": 3.076, "guntha": 12.302, "cent": 122.5},
                     "khasra_no": "124/2",
                     "khata_no": "45",
                     "land_type": "Self-cultivated",
                     "land_use": "Agricultural",
                     "mutation_no": "4521",
                     "registration_date": "12/03/2019",
-                    "location": {
-                        "district": "Lucknow",
-                        "tehsil": "Lucknow Sadar",
-                        "village": "Amausi",
-                        "state": "Uttar Pradesh",
-                    },
+                    "location": {"district": "Lucknow", "tehsil": "Lucknow Sadar", "village": "Amausi", "state": "Uttar Pradesh"},
                 },
-                "raw_ocr_text": "उत्तर प्रदेश सरकार\nखतौनी (अधिकार अभिलेख)\nजिला: लखनऊ | तहसील: लखनऊ सदर | ग्राम: अमौसी\nखाता नं: 45 | खसरा नं: 124/2\nखाताधारक: राम प्रसाद सिंह\nसह खाताधारक: सुमन देवी\nभूमि क्षेत्रफल: 1.245 हेक्टेयर\nभूमि प्रकार: खुद काश्त | उपयोग: कृषि\nदाखिल खारिज नं: 4521\nपंजीकरण दिनांक: 12/03/2019",
                 "tables_found": 1,
                 "warnings": [],
                 "cached": False,
@@ -424,27 +315,15 @@ async def demo_data():
                     "survey_no": "45/A",
                     "owner_name": "Suresh Vitthal Patil",
                     "co_owner": None,
-                    "land_area": {
-                        "hectare": 0.81,
-                        "bigha": 3.203,
-                        "acre": 2.001,
-                        "guntha": 8.0,
-                        "cent": 79.7,
-                    },
+                    "land_area": {"hectare": 0.81, "bigha": 3.203, "acre": 2.001, "guntha": 8.0, "cent": 79.7},
                     "khasra_no": "45/A",
                     "khata_no": "112",
                     "land_type": "Irrigated",
                     "land_use": "Agricultural",
                     "mutation_no": None,
                     "registration_date": "05/11/2021",
-                    "location": {
-                        "district": "Pune",
-                        "tehsil": "Haveli",
-                        "village": "Uruli Kanchan",
-                        "state": "Maharashtra",
-                    },
+                    "location": {"district": "Pune", "tehsil": "Haveli", "village": "Uruli Kanchan", "state": "Maharashtra"},
                 },
-                "raw_ocr_text": "महाराष्ट्र शासन\n७/१२ उतारा\nजिल्हा: पुणे | तालुका: हवेली | गाव: उरुळी कांचन\nसर्वे नं: ४५/अ | खाता नं: ११२\nखातेदाराचे नाव: Suresh Vitthal Patil\nक्षेत्र: ०.८१ हेक्टर | सिंचित\nनोंदणी दिनांक: ०५/११/२०२१",
                 "tables_found": 2,
                 "warnings": ["Low confidence on page 2 — handwritten annotations detected."],
                 "cached": False,
@@ -460,27 +339,15 @@ async def demo_data():
                     "survey_no": None,
                     "owner_name": "Gurpreet Singh",
                     "co_owner": "Harpreet Kaur",
-                    "land_area": {
-                        "hectare": 2.023,
-                        "bigha": 7.998,
-                        "acre": 4.999,
-                        "guntha": 19.99,
-                        "cent": 199.9,
-                    },
+                    "land_area": {"hectare": 2.023, "bigha": 7.998, "acre": 4.999, "guntha": 19.99, "cent": 199.9},
                     "khasra_no": "88/2",
                     "khata_no": None,
                     "land_type": "Canal-irrigated",
                     "land_use": "Agricultural",
                     "mutation_no": "7834",
                     "registration_date": None,
-                    "location": {
-                        "district": "Amritsar",
-                        "tehsil": "Ajnala",
-                        "village": "Fatehpur",
-                        "state": "Punjab",
-                    },
+                    "location": {"district": "Amritsar", "tehsil": "Ajnala", "village": "Fatehpur", "state": "Punjab"},
                 },
-                "raw_ocr_text": "ਪੰਜਾਬ ਸਰਕਾਰ\nਜਮਾਬੰਦੀ\nਜ਼ਿਲ੍ਹਾ: ਅੰਮ੍ਰਿਤਸਰ | ਤਹਿਸੀਲ: ਅਜਨਾਲਾ | ਪਿੰਡ: ਫਤਿਹਪੁਰ\nਮਾਲਕ: Gurpreet Singh | ਸਹਿ-ਮਾਲਕ: Harpreet Kaur\nਰਕਬਾ: 2.023 ਹੈਕਟੇਅਰ | ਨਹਿਰੀ\nਮਿਊਟੇਸ਼ਨ ਨੰ: 7834",
                 "tables_found": 3,
                 "warnings": [
                     "Low confidence score — consider uploading a higher-resolution scan.",
@@ -493,8 +360,5 @@ async def demo_data():
     }
 
 
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=True)

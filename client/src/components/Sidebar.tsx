@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { UserPlus, LayoutDashboard, FileText, LogOut, User, X } from 'lucide-react';
+import { UserPlus, LayoutDashboard, FileText, LogOut, User, X, ScanText } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuth } from '../context/AuthContext';
 import { useState } from 'react';
@@ -15,6 +15,12 @@ const NAV_SECTIONS = [
     label: 'MAIN',
     items: [
       { label: 'Dashboard', path: '/app/dashboard', icon: LayoutDashboard },
+    ],
+  },
+  {
+    label: 'TOOLS',
+    items: [
+      { label: 'Land Record OCR', path: '/app/land-ocr', icon: ScanText },
     ],
   },
   {
