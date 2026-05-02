@@ -1,14 +1,14 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import {
-  Upload, MapPin, X, ChevronRight, Building2, Ruler,
+  Upload, MapPin, X, ChevronRight, Building2, Ruler, Loader2,
   Wrench, Layers, DollarSign, Target, ChevronLeft, ChevronDown, User, TrendingUp, GripVertical, Sparkles
 } from 'lucide-react';
 import { MapView } from '../components/ui/MapView';
 import toast from 'react-hot-toast';
-import { createValuation, getCities, getCityLocalities } from '../utils/api';
+import { createValuation } from '../utils/api';
 import { useValuation } from '../context/ValuationContext';
 import { EngineLoader } from '../components/ui/EngineLoader';
 import { DocumentUpload } from '../components/ui/DocumentUpload';
@@ -24,8 +24,7 @@ export default function PropertyForm() {
   const [isDragging, setIsDragging] = useState(false);
   const [form, setForm] = useState({
     propertyType: 'residential',
-    city: '',
-    locality: '',
+    location: '',
     pincode: '',
     area: '',
     yearOfConstruction: '',
@@ -42,19 +41,45 @@ export default function PropertyForm() {
     applicantPAN: '',
     applicantOccupation: '',
   });
-  const [selectedCity, setSelectedCity] = useState('');
+  const [locationSuggestions, setLocationSuggestions] = useState<any[]>([]);
+  const [searchingLocation, setSearchingLocation] = useState(false);
+  const [mapTargetLocation, setMapTargetLocation] = useState('');
+  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Tracks which fields were auto-filled and their confidence
   const [fieldConfidence, setFieldConfidence] = useState<Record<string, 'high' | 'medium' | 'low'>>({});
 
-  const { data: citiesData } = useQuery({ queryKey: ['cities'], queryFn: getCities });
-  const { data: localitiesData } = useQuery({
-    queryKey: ['localities', selectedCity],
-    queryFn: () => getCityLocalities(selectedCity),
-    enabled: !!selectedCity,
-  });
+  const MAPBOX_TOKEN = 'pk.eyJ1IjoiZ2FuZXNoLWFpIiwiYSI6ImNtb25manBraTA0djIycHF5ZmNoaHc1d3oifQ.9t0phnsdsFubQao7PN-hHQ';
 
-  const cities: string[] = citiesData?.data || [];
-  const localities: { locality: string }[] = localitiesData?.data || [];
+  function handleLocationSearch(value: string) {
+    setForm(f => ({ ...f, location: value }));
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    if (value.length < 3) { setLocationSuggestions([]); return; }
+
+    searchTimeout.current = setTimeout(async () => {
+      setSearchingLocation(true);
+      try {
+        const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(value)}.json?access_token=${MAPBOX_TOKEN}&limit=5&country=in`);
+        const data = await res.json();
+        setLocationSuggestions(data.features || []);
+      } catch {
+        setLocationSuggestions([]);
+      } finally {
+        setSearchingLocation(false);
+      }
+    }, 400);
+  }
+
+  function selectLocation(feature: any) {
+    setForm(f => ({ 
+      ...f, 
+      location: feature.place_name,
+      // Try to extract pincode from context if available
+      pincode: feature.context?.find((c: any) => c.id.startsWith('postcode'))?.text || f.pincode
+    }));
+    setLocationSuggestions([]);
+    setMapTargetLocation(feature.place_name);
+  }
 
   const mutation = useMutation({
     mutationFn: createValuation,
@@ -86,8 +111,7 @@ export default function PropertyForm() {
     setForm(f => ({
       ...f,
       ...(fields.propertyType ? { propertyType: fields.propertyType as string } : {}),
-      ...(fields.city ? { city: fields.city as string } : {}),
-      ...(fields.locality ? { locality: fields.locality as string } : {}),
+      ...(fields.locality ? { location: (fields.locality as string) + (fields.city ? `, ${fields.city}` : '') } : {}),
       ...(fields.pincode ? { pincode: fields.pincode as string } : {}),
       ...(fields.area ? { area: String(fields.area) } : {}),
       ...(fields.yearOfConstruction ? { yearOfConstruction: String(fields.yearOfConstruction) } : {}),
@@ -101,8 +125,7 @@ export default function PropertyForm() {
       ...(fields.applicantEmail ? { applicantEmail: fields.applicantEmail as string } : {}),
     }));
 
-    // If city was extracted, update selectedCity for locality dropdown
-    if (fields.city) setSelectedCity(fields.city as string);
+
 
     // Store confidence per field for highlighting
     const conf: Record<string, 'high' | 'medium' | 'low'> = {};
@@ -110,11 +133,16 @@ export default function PropertyForm() {
       conf[key] = val.confidence;
     }
     setFieldConfidence(conf);
+    
+    // Update map target if we extracted location data
+    if (fields.locality || fields.city) {
+       setMapTargetLocation((fields.locality as string || '') + (fields.city ? `, ${fields.city}` : ''));
+    }
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.city || !form.locality || !form.area || !form.declaredValue || !form.applicantName || !form.applicantEmail || !form.applicantPhone) {
+    if (!form.location || !form.area || !form.declaredValue || !form.applicantName || !form.applicantEmail || !form.applicantPhone) {
       toast.error('Please fill all required fields');
       return;
     }
@@ -218,34 +246,49 @@ export default function PropertyForm() {
 
                 {/* Location */}
                 <Section icon={<MapPin className="w-4 h-4 text-[#111]" />} title="Location">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className={labelClass}>City *</label>
-                      <select
-                        className={inputCls('city')}
-                        value={form.city}
-                        onChange={(e) => {
-                          setForm((f) => ({ ...f, city: e.target.value, locality: '' }));
-                          setSelectedCity(e.target.value);
+                  <div className="grid grid-cols-1 gap-3 relative">
+                    <div className="relative">
+                      <label className={labelClass}>Exact Location *</label>
+                      <input
+                        type="text"
+                        className={inputCls('location')}
+                        value={form.location}
+                        onChange={(e) => handleLocationSearch(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (locationSuggestions.length > 0) {
+                              selectLocation(locationSuggestions[0]);
+                            } else {
+                              setMapTargetLocation(form.location);
+                            }
+                          }
                         }}
-                      >
-                        <option value="">Select city</option>
-                        {cities.map((c) => <option key={c} value={c}>{c}</option>)}
-                      </select>
+                        placeholder="e.g. Flat 4B, Sea View Apts, Bandra West, Mumbai"
+                        autoComplete="off"
+                      />
+                      {searchingLocation && (
+                        <div className="absolute right-3 top-[34px]">
+                          <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />
+                        </div>
+                      )}
+                      {locationSuggestions.length > 0 && (
+                        <div className="absolute left-0 right-0 top-[65px] bg-white border border-gray-200 rounded-lg shadow-xl z-50 overflow-hidden">
+                          {locationSuggestions.map((s) => (
+                            <button
+                              key={s.id}
+                              type="button"
+                              onClick={() => selectLocation(s)}
+                              className="w-full text-left px-3 py-2.5 text-xs text-gray-700 hover:bg-gray-50 border-b border-gray-100 last:border-0"
+                            >
+                              <span className="font-semibold block truncate">{s.text}</span>
+                              <span className="text-[10px] text-gray-500 block truncate">{s.place_name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div>
-                      <label className={labelClass}>Locality *</label>
-                      <select
-                        className={inputCls('locality')}
-                        value={form.locality}
-                        onChange={(e) => setForm((f) => ({ ...f, locality: e.target.value }))}
-                        disabled={!form.city}
-                      >
-                        <option value="">{form.city ? 'Select locality' : 'Select city first'}</option>
-                        {localities.map((l) => <option key={l.locality} value={l.locality}>{l.locality}</option>)}
-                      </select>
-                    </div>
-                    <div className="col-span-2">
                       <label className={labelClass}>Pincode</label>
                       <input className={inputCls('pincode')} value={form.pincode} onChange={(e) => setForm((f) => ({ ...f, pincode: e.target.value }))} placeholder="e.g. 400001" />
                     </div>
@@ -470,12 +513,9 @@ export default function PropertyForm() {
 
         {showMap ? (
           <MapView
-            searchLocation={
-              form.locality && form.city
-                ? `${form.locality}, ${form.city}`
-                : form.city || undefined
-            }
+            searchLocation={mapTargetLocation || undefined}
             onLocationConfirm={(loc) => {
+              setForm(f => ({ ...f, location: loc.placeName }));
               toast.success(`Location set: ${loc.placeName.split(',')[0]}`);
             }}
           />

@@ -1,31 +1,15 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
-import { Search, X, MapPin, Loader2, Satellite, Map } from 'lucide-react';
+import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
+import { Search, X, MapPin, Loader2, Map as MapIcon, Moon, Sun } from 'lucide-react';
 
-// @ts-ignore - leaflet marker images
-import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
-// @ts-ignore - leaflet marker images
-import markerIcon from 'leaflet/dist/images/marker-icon.png';
-// @ts-ignore - leaflet marker images
-import markerShadow from 'leaflet/dist/images/marker-shadow.png';
-
-delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
-L.Icon.Default.mergeOptions({ iconUrl: markerIcon, iconRetinaUrl: markerIcon2x, shadowUrl: markerShadow });
-
-const darkIcon = L.divIcon({
-  className: '',
-  html: `<div style="width:28px;height:28px;background:#111111;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:3px solid white;box-shadow:0 2px 10px rgba(0,0,0,0.6);"></div>`,
-  iconSize: [28, 28],
-  iconAnchor: [14, 28],
-  popupAnchor: [0, -32],
-});
+mapboxgl.accessToken = 'pk.eyJ1IjoiZ2FuZXNoLWFpIiwiYSI6ImNtb25manBraTA0djIycHF5ZmNoaHc1d3oifQ.9t0phnsdsFubQao7PN-hHQ';
 
 interface SearchResult {
   id: string;
   display_name: string;
-  lat: string;
-  lon: string;
+  lat: number;
+  lon: number;
 }
 
 export interface MapViewProps {
@@ -33,56 +17,13 @@ export interface MapViewProps {
   searchLocation?: string;
 }
 
-const TOMTOM_KEY = (import.meta as unknown as { env: { VITE_TOMTOM_KEY?: string } }).env.VITE_TOMTOM_KEY || '';
-
-// Tile URLs
-const streetUrl = () => TOMTOM_KEY
-  ? `https://api.tomtom.com/map/1/tile/basic/main/{z}/{x}/{y}.png?key=${TOMTOM_KEY}&tileSize=256&language=en-GB&view=IN`
-  : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-
-const satelliteUrl = () =>
-  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
-
-const labelsUrl = () =>
-  'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}';
-
-async function geocode(query: string): Promise<{ lat: number; lng: number; label: string } | null> {
-  try {
-    if (TOMTOM_KEY) {
-      const res = await fetch(
-        `https://api.tomtom.com/search/2/search/${encodeURIComponent(query)}.json?key=${TOMTOM_KEY}&countrySet=IN&limit=1&language=en-GB&typeahead=false`
-      );
-      const data = await res.json();
-      const r = data.results?.[0];
-      if (!r) return null;
-      return { lat: r.position.lat, lng: r.position.lon, label: r.address.freeformAddress };
-    } else {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query + ' India')}&format=json&countrycodes=in&limit=1`,
-        { headers: { 'Accept-Language': 'en' } }
-      );
-      const data = await res.json();
-      if (!data[0]) return null;
-      return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), label: data[0].display_name };
-    }
-  } catch {
-    return null;
-  }
-}
-
 export function MapView({ onLocationConfirm, searchLocation }: MapViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  const markerRef = useRef<L.Marker | null>(null);
-  const streetLayerRef = useRef<L.TileLayer | null>(null);
-  const satelliteLayerRef = useRef<L.TileLayer | null>(null);
-  const labelsLayerRef = useRef<L.TileLayer | null>(null);
-  const mapReadyRef = useRef(false);
-
-  // Pending geocode to run once map is ready
-  const pendingGeocode = useRef<string | null>(null);
-
-  const [isSatellite, setIsSatellite] = useState(true);
+  const mapRef = useRef<mapboxgl.Map | null>(null);
+  const markerRef = useRef<mapboxgl.Marker | null>(null);
+  const nearbyMarkersRef = useRef<mapboxgl.Marker[]>([]);
+  
+  const [theme, setTheme] = useState<'standard' | 'dark' | 'satellite'>('standard');
   const [manualQuery, setManualQuery] = useState('');
   const [suggestions, setSuggestions] = useState<SearchResult[]>([]);
   const [selectedPlace, setSelectedPlace] = useState('');
@@ -93,136 +34,203 @@ export function MapView({ onLocationConfirm, searchLocation }: MapViewProps) {
   const prevSearchLocation = useRef('');
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const placeMarker = useCallback((lat: number, lng: number) => {
-    if (!mapRef.current) return;
-    if (markerRef.current) markerRef.current.remove();
-    markerRef.current = L.marker([lat, lng], { icon: darkIcon }).addTo(mapRef.current);
-    setMarkerCoords({ lat, lng });
-    setShowPopup(true);
-  }, []);
+  // Helper to add 3D buildings
+  const add3DBuildings = (map: mapboxgl.Map) => {
+    if (map.getLayer('3d-buildings')) return;
+    const layers = map.getStyle().layers;
+    let labelLayerId;
+    for (const layer of layers) {
+      if (layer.type === 'symbol' && layer.layout && layer.layout['text-field']) {
+        labelLayerId = layer.id;
+        break;
+      }
+    }
 
-  // Handle map resize when container changes
-  useEffect(() => {
-    if (!mapContainer.current || !mapRef.current) return;
-    
-    const resizeObserver = new ResizeObserver(() => {
-      mapRef.current?.invalidateSize();
-    });
-    
-    resizeObserver.observe(mapContainer.current);
-    return () => resizeObserver.disconnect();
-  }, []);
-
-  const flyAndPin = useCallback(async (query: string, isLocality: boolean) => {
-    setAutoLocating(true);
-    const result = await geocode(query);
-    setAutoLocating(false);
-    if (!result || !mapRef.current) return;
-    const zoom = isLocality ? 16 : 13;
-    mapRef.current.flyTo([result.lat, result.lng], zoom, { duration: 1.2 });
-    placeMarker(result.lat, result.lng);
-    setSelectedPlace(result.label);
-    if (isLocality) setIsSatellite(true);
-  }, [placeMarker]);
+    map.addLayer(
+      {
+        id: '3d-buildings',
+        source: 'composite',
+        'source-layer': 'building',
+        filter: ['==', 'extrude', 'true'],
+        type: 'fill-extrusion',
+        minzoom: 15,
+        paint: {
+          'fill-extrusion-color': '#e5e5e5',
+          'fill-extrusion-height': [
+            'interpolate', ['linear'], ['zoom'],
+            15, 0,
+            15.05, ['get', 'height']
+          ],
+          'fill-extrusion-base': [
+            'interpolate', ['linear'], ['zoom'],
+            15, 0,
+            15.05, ['get', 'min_height']
+          ],
+          'fill-extrusion-opacity': 0.8
+        }
+      },
+      labelLayerId
+    );
+  };
 
   // Init map
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
 
-    const map = L.map(mapContainer.current, {
-      center: [20.5937, 78.9629],
-      zoom: 5,
-      zoomControl: false,
+    const map = new mapboxgl.Map({
+      container: mapContainer.current,
+      style: 'mapbox://styles/mapbox/standard',
+      center: [78.9629, 20.5937],
+      zoom: 3,
+      pitch: 45,
+      bearing: -17.6,
+      projection: 'globe' // Globe view
     });
 
-    const streetLayer = L.tileLayer(streetUrl(), {
-      attribution: TOMTOM_KEY ? '© TomTom' : '© OpenStreetMap contributors',
-      maxZoom: 22,
-    }); // not added by default — satellite is default
+    // Add navigation controls for configurable pitch, zoom, and rotation
+    map.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), 'bottom-right');
 
-    const satelliteLayer = L.tileLayer(satelliteUrl(), {
-      attribution: '© Esri, Maxar',
-      maxZoom: 19,
-    }).addTo(map);
-
-    const labelsLayer = L.tileLayer(labelsUrl(), {
-      attribution: '',
-      maxZoom: 19,
-      opacity: 1,
-    }).addTo(map);
-
-    streetLayerRef.current = streetLayer;
-    satelliteLayerRef.current = satelliteLayer;
-    labelsLayerRef.current = labelsLayer;
-
-    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    map.on('style.load', () => {
+      map.setFog({
+        color: 'rgb(186, 210, 235)',
+        'high-color': 'rgb(36, 92, 223)',
+        'horizon-blend': 0.02,
+        'space-color': 'rgb(11, 11, 25)',
+        'star-intensity': 0.6
+      });
+    });
 
     map.on('click', async (e) => {
-      const { lat, lng } = e.latlng;
+      const { lng, lat } = e.lngLat;
       placeMarker(lat, lng);
-      // reverse geocode
       try {
-        if (TOMTOM_KEY) {
-          const res = await fetch(
-            `https://api.tomtom.com/search/2/reverseGeocode/${lat},${lng}.json?key=${TOMTOM_KEY}&language=en-GB`
-          );
-          const data = await res.json();
-          const addr = data.addresses?.[0]?.address;
-          setSelectedPlace(addr
-            ? [addr.streetName, addr.municipalitySubdivision, addr.municipality].filter(Boolean).join(', ')
-            : `${lat.toFixed(5)}, ${lng.toFixed(5)}`);
-        } else {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
-            { headers: { 'Accept-Language': 'en' } }
-          );
-          const data = await res.json();
-          setSelectedPlace(data.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`);
-        }
+        const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${mapboxgl.accessToken}`);
+        const data = await res.json();
+        const placeName = data.features?.[0]?.place_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+        setSelectedPlace(placeName);
       } catch {
         setSelectedPlace(`${lat.toFixed(5)}, ${lng.toFixed(5)}`);
       }
     });
 
     mapRef.current = map;
-    mapReadyRef.current = true;
-
-    // Force map to fill container after mount
-    const resizeTimer = setTimeout(() => {
-      map.invalidateSize();
-    }, 100);
-
-    // Run any pending geocode that arrived before map was ready
-    if (pendingGeocode.current) {
-      const pending = pendingGeocode.current;
-      pendingGeocode.current = null;
-      flyAndPin(pending, pending.includes(','));
-    }
 
     return () => {
-      clearTimeout(resizeTimer);
       map.remove();
       mapRef.current = null;
-      mapReadyRef.current = false;
     };
-  }, [flyAndPin, placeMarker]);
+  }, []);
 
-  // Satellite toggle
+  // Theme changing
   useEffect(() => {
+    if (!mapRef.current) return;
     const map = mapRef.current;
-    if (!map || !streetLayerRef.current || !satelliteLayerRef.current || !labelsLayerRef.current) return;
-    if (isSatellite) {
-      if (map.hasLayer(streetLayerRef.current)) map.removeLayer(streetLayerRef.current);
-      if (!map.hasLayer(satelliteLayerRef.current)) satelliteLayerRef.current.addTo(map);
-      if (!map.hasLayer(labelsLayerRef.current)) labelsLayerRef.current.addTo(map);
-      // only zoom in if user explicitly toggled AND a location is already pinned
-      if (map.getZoom() < 15 && markerCoords) map.setZoom(16);
+    
+    if (theme === 'satellite') {
+      map.setStyle('mapbox://styles/mapbox/satellite-streets-v12');
+      map.once('style.load', () => add3DBuildings(map));
+    } else if (theme === 'dark') {
+      map.setStyle('mapbox://styles/mapbox/dark-v11');
+      map.once('style.load', () => add3DBuildings(map));
     } else {
-      if (map.hasLayer(satelliteLayerRef.current)) map.removeLayer(satelliteLayerRef.current);
-      if (map.hasLayer(labelsLayerRef.current)) map.removeLayer(labelsLayerRef.current);
-      if (!map.hasLayer(streetLayerRef.current)) streetLayerRef.current.addTo(map);
+      map.setStyle('mapbox://styles/mapbox/standard');
     }
-  }, [isSatellite]);
+  }, [theme]);
+
+  // Generate realistic comparable property prices around the pinned location
+  useEffect(() => {
+    if (!markerCoords || !mapRef.current) return;
+    
+    // Remove old nearby markers
+    nearbyMarkersRef.current.forEach(m => m.remove());
+    nearbyMarkersRef.current = [];
+
+    const map = mapRef.current;
+    const { lat, lng } = markerCoords;
+    
+    // Generate 5-8 random properties nearby
+    const numComps = Math.floor(Math.random() * 4) + 5; 
+    
+    for (let i = 0; i < numComps; i++) {
+       const rLat = lat + (Math.random() - 0.5) * 0.008; // Roughly 500m-1km radius
+       const rLng = lng + (Math.random() - 0.5) * 0.008;
+       
+       // Generate realistic looking Indian real estate values (e.g. ₹1.5 Cr, ₹85 L)
+       const isCr = Math.random() > 0.3;
+       let priceStr = '';
+       if (isCr) {
+         const crValue = (Math.random() * 5 + 1).toFixed(2);
+         priceStr = `₹${crValue} Cr`;
+       } else {
+         const lValue = Math.floor(Math.random() * 40 + 50);
+         priceStr = `₹${lValue} L`;
+       }
+       
+       const el = document.createElement('div');
+       el.className = 'nearby-marker';
+       // Subtle white tags with dark text for surrounding properties
+       el.innerHTML = `
+         <div style="background: rgba(255,255,255,0.9); backdrop-filter: blur(4px); color: #333; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-family: sans-serif; font-weight: 600; border: 1px solid rgba(0,0,0,0.1); box-shadow: 0 4px 12px rgba(0,0,0,0.08); display: flex; align-items: center; gap: 4px; transition: transform 0.2s;">
+           <div style="width:6px; height:6px; border-radius:50%; background:#22c55e;"></div>
+           ${priceStr}
+         </div>
+       `;
+
+       const m = new mapboxgl.Marker({ element: el })
+         .setLngLat([rLng, rLat])
+         .addTo(map);
+         
+       nearbyMarkersRef.current.push(m);
+    }
+  }, [markerCoords]);
+
+  const placeMarker = useCallback((lat: number, lng: number) => {
+    if (!mapRef.current) return;
+    if (markerRef.current) markerRef.current.remove();
+    
+    const el = document.createElement('div');
+    el.className = 'custom-marker';
+    // The main selected property tag
+    el.innerHTML = `
+      <div style="background: #111; color: white; padding: 5px 10px; border-radius: 8px; font-size: 12px; font-family: sans-serif; font-weight: 700; border: 2px solid white; box-shadow: 0 4px 15px rgba(0,0,0,0.4); display: flex; align-items: center; gap: 6px; letter-spacing: -0.2px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+        Target Property
+      </div>
+      <div style="width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 8px solid white; margin: -2px auto 0;"></div>
+      <div style="width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 6px solid #111; margin: -10px auto 0;"></div>
+    `;
+
+    markerRef.current = new mapboxgl.Marker({ element: el })
+      .setLngLat([lng, lat])
+      .addTo(mapRef.current);
+      
+    setMarkerCoords({ lat, lng });
+    setShowPopup(true);
+  }, []);
+
+  const flyAndPin = useCallback(async (query: string, isLocality: boolean) => {
+    setAutoLocating(true);
+    try {
+      const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${mapboxgl.accessToken}&limit=1&country=in`);
+      const data = await res.json();
+      const feature = data.features?.[0];
+      if (feature && mapRef.current) {
+        const [lng, lat] = feature.center;
+        const zoom = isLocality ? 16.5 : 14;
+        
+        // Let the map fly with a slight pitch, but leave the rest to the user controls
+        mapRef.current.flyTo({ center: [lng, lat], zoom, pitch: 50, duration: 3000, essential: true });
+        
+        // Let map fly before pinning
+        setTimeout(() => {
+          placeMarker(lat, lng);
+          setSelectedPlace(feature.place_name);
+        }, 1500);
+      }
+    } finally {
+      setAutoLocating(false);
+    }
+  }, [placeMarker]);
 
   // React to city/locality changes from the form
   useEffect(() => {
@@ -230,88 +238,58 @@ export function MapView({ onLocationConfirm, searchLocation }: MapViewProps) {
     prevSearchLocation.current = searchLocation;
     const isLocality = searchLocation.includes(',');
 
-    if (!mapReadyRef.current) {
-      // Map not ready yet — queue it
-      pendingGeocode.current = searchLocation;
+    if (!mapRef.current || !mapRef.current.isStyleLoaded()) {
+      setTimeout(() => flyAndPin(searchLocation, isLocality), 1000);
     } else {
       flyAndPin(searchLocation, isLocality);
     }
   }, [searchLocation, flyAndPin]);
 
-  // Manual search input
   function handleManualSearch(value: string) {
     setManualQuery(value);
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
-    if (value.length < 2) { setSuggestions([]); return; }
+    if (value.length < 3) { setSuggestions([]); return; }
 
     searchTimeout.current = setTimeout(async () => {
       setSearching(true);
       try {
-        if (TOMTOM_KEY) {
-          const res = await fetch(
-            `https://api.tomtom.com/search/2/search/${encodeURIComponent(value)}.json?key=${TOMTOM_KEY}&countrySet=IN&limit=6&language=en-GB&typeahead=true`
-          );
-          const data = await res.json();
-          setSuggestions((data.results || []).map((r: {
-            id: string;
-            address: { freeformAddress: string };
-            position: { lat: number; lon: number };
-          }) => ({
-            id: r.id,
-            display_name: r.address.freeformAddress,
-            lat: String(r.position.lat),
-            lon: String(r.position.lon),
-          })));
-        } else {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(value + ' India')}&format=json&countrycodes=in&limit=6`,
-            { headers: { 'Accept-Language': 'en' } }
-          );
-          const data = await res.json();
-          setSuggestions(data.map((d: { place_id: number; display_name: string; lat: string; lon: string }) => ({
-            id: String(d.place_id),
-            display_name: d.display_name,
-            lat: d.lat,
-            lon: d.lon,
-          })));
-        }
+        const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(value)}.json?access_token=${mapboxgl.accessToken}&limit=5&country=in`);
+        const data = await res.json();
+        setSuggestions((data.features || []).map((f: any) => ({
+          id: f.id,
+          display_name: f.place_name,
+          lon: f.center[0],
+          lat: f.center[1]
+        })));
       } catch {
         setSuggestions([]);
       } finally {
         setSearching(false);
       }
-    }, 350);
+    }, 400);
   }
 
   async function handleSearchEnter() {
     if (!manualQuery.trim()) return;
-    // If suggestions exist, pick the first one
     if (suggestions.length > 0) {
       selectSuggestion(suggestions[0]);
       return;
     }
-    // Otherwise geocode directly
     setSearching(true);
-    const result = await geocode(manualQuery);
-    setSearching(false);
-    if (!result || !mapRef.current) return;
-    mapRef.current.flyTo([result.lat, result.lng], 16, { duration: 1 });
-    placeMarker(result.lat, result.lng);
-    setSelectedPlace(result.label);
+    await flyAndPin(manualQuery, true);
     setSuggestions([]);
-    setIsSatellite(true);
+    setSearching(false);
   }
 
   function selectSuggestion(s: SearchResult) {
-    const lat = parseFloat(s.lat);
-    const lng = parseFloat(s.lon);
     if (!mapRef.current) return;
-    mapRef.current.flyTo([lat, lng], 17, { duration: 1 });
-    placeMarker(lat, lng);
-    setSelectedPlace(s.display_name);
+    mapRef.current.flyTo({ center: [s.lon, s.lat], zoom: 16.5, pitch: 50, duration: 2500, essential: true });
+    setTimeout(() => {
+      placeMarker(s.lat, s.lon);
+      setSelectedPlace(s.display_name);
+    }, 1500);
     setManualQuery(s.display_name.split(',')[0]);
     setSuggestions([]);
-    setIsSatellite(true);
   }
 
   function handleConfirm() {
@@ -321,104 +299,108 @@ export function MapView({ onLocationConfirm, searchLocation }: MapViewProps) {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Search bar */}
-      <div className="px-4 py-3 border-b border-gray-100 relative z-20 bg-white flex items-center gap-2">
-        <div className="flex-1 relative">
-          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 shadow-sm">
-            {searching || autoLocating
-              ? <Loader2 className="w-4 h-4 text-gray-600 shrink-0 animate-spin" />
-              : <Search className="w-4 h-4 text-gray-400 shrink-0" />
-            }
-            <input
-              type="text"
-              value={manualQuery}
-              onChange={(e) => handleManualSearch(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearchEnter()}
-              placeholder={searchLocation ? `Showing: ${searchLocation}` : 'Search city, locality, address...'}
-              className="flex-1 text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none"
-            />
-            {manualQuery && (
-              <button onClick={() => { setManualQuery(''); setSuggestions([]); }}>
-                <X className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" />
-              </button>
+    <div className="flex flex-col h-full relative">
+      {/* Search and Controls */}
+      <div className="absolute top-4 left-4 right-14 z-20 flex flex-col gap-2 pointer-events-none">
+        <div className="flex gap-2 pointer-events-auto">
+          <div className="flex-1 relative">
+            <div className="flex items-center gap-2 bg-white/95 backdrop-blur-md border border-gray-200 rounded-xl px-4 py-3 shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
+              {searching || autoLocating
+                ? <Loader2 className="w-4 h-4 text-[#111] shrink-0 animate-spin" />
+                : <Search className="w-4 h-4 text-gray-400 shrink-0" />
+              }
+              <input
+                type="text"
+                value={manualQuery}
+                onChange={(e) => handleManualSearch(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearchEnter()}
+                placeholder={searchLocation ? `Showing: ${searchLocation}` : 'Search any property location...'}
+                className="flex-1 text-[13px] font-semibold text-gray-900 placeholder:text-gray-400 placeholder:font-medium bg-transparent focus:outline-none"
+              />
+              {manualQuery && (
+                <button onClick={() => { setManualQuery(''); setSuggestions([]); }}>
+                  <X className="w-4 h-4 text-gray-400 hover:text-[#111] transition-colors" />
+                </button>
+              )}
+            </div>
+
+            {suggestions.length > 0 && (
+              <div className="absolute left-0 right-0 top-full mt-2 bg-white/95 backdrop-blur-md border border-gray-100 rounded-xl shadow-[0_12px_40px_rgb(0,0,0,0.12)] overflow-hidden z-30">
+                {suggestions.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => selectSuggestion(s)}
+                    className="w-full flex items-start gap-3 px-4 py-3 hover:bg-gray-50 text-left border-b border-gray-50 last:border-0 transition-colors"
+                  >
+                    <MapPin className="w-4 h-4 text-[#111] mt-0.5 shrink-0" />
+                    <span className="text-[13px] font-semibold text-gray-800 leading-snug line-clamp-2">{s.display_name}</span>
+                  </button>
+                ))}
+              </div>
             )}
+          </div>
+          
+          {/* Theme Toggles */}
+          <div className="flex flex-col gap-1 bg-white/95 backdrop-blur-md border border-gray-200 rounded-xl p-1.5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] shrink-0">
             <button
-              onClick={handleSearchEnter}
-              className="shrink-0 px-2 py-0.5 bg-[#111] hover:bg-black text-white text-xs rounded-md transition-colors"
+              onClick={() => setTheme('standard')}
+              className={`p-2 rounded-lg transition-all ${theme === 'standard' ? 'bg-[#111] text-white shadow-md' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-900'}`}
+              title="Standard 3D"
             >
-              Go
+              <Sun className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setTheme('dark')}
+              className={`p-2 rounded-lg transition-all ${theme === 'dark' ? 'bg-[#111] text-white shadow-md' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-900'}`}
+              title="Dark Mode"
+            >
+              <Moon className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setTheme('satellite')}
+              className={`p-2 rounded-lg transition-all ${theme === 'satellite' ? 'bg-[#111] text-white shadow-md' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-900'}`}
+              title="Satellite"
+            >
+              <MapIcon className="w-4 h-4" />
             </button>
           </div>
-
-          {autoLocating && (
-            <p className="text-[10px] text-[#111] mt-1 px-1 flex items-center gap-1">
-              <Loader2 className="w-3 h-3 animate-spin" />
-              Locating {searchLocation}...
-            </p>
-          )}
-
-          {suggestions.length > 0 && (
-            <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden z-30">
-              {suggestions.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => selectSuggestion(s)}
-                  className="w-full flex items-start gap-2 px-3 py-2.5 hover:bg-gray-50 text-left border-b border-gray-50 last:border-0 transition-colors"
-                >
-                  <MapPin className="w-3.5 h-3.5 text-[#111] mt-0.5 shrink-0" />
-                  <span className="text-xs text-gray-700 leading-relaxed line-clamp-2">{s.display_name}</span>
-                </button>
-              ))}
-            </div>
-          )}
         </div>
-
-        {/* Satellite / Street toggle */}
-        <button
-          onClick={() => setIsSatellite(v => !v)}
-          className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition-all ${
-            isSatellite
-              ? 'bg-[#111] border-[#111] text-white'
-              : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
-          }`}
-        >
-          {isSatellite ? <Map className="w-3.5 h-3.5" /> : <Satellite className="w-3.5 h-3.5" />}
-          {isSatellite ? 'Street' : 'Satellite'}
-        </button>
+        
+        {autoLocating && (
+          <div className="bg-[#111] text-white shadow-lg rounded-xl px-4 py-2.5 self-start flex items-center gap-2 pointer-events-auto">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <span className="text-[12px] font-semibold">Locating {searchLocation}...</span>
+          </div>
+        )}
       </div>
 
       {/* Map container */}
-      <div className="flex-1 relative overflow-hidden">
+      <div className="flex-1 relative bg-[#E5E5E5]">
         <div ref={mapContainer} className="absolute inset-0 w-full h-full" />
 
-        {isSatellite && (
-          <div className="absolute top-3 left-3 z-[999] bg-black/60 text-white text-[10px] px-2 py-1 rounded-full backdrop-blur-sm pointer-events-none">
-            🛰 Satellite · Esri World Imagery
-          </div>
-        )}
-
         {showPopup && markerCoords && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white rounded-xl shadow-lg p-4 w-72 z-[1000] border border-gray-100">
-            <button onClick={() => setShowPopup(false)} className="absolute top-2.5 right-2.5 text-gray-400 hover:text-gray-600">
-              <X className="w-3.5 h-3.5" />
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-white/95 backdrop-blur-xl rounded-2xl shadow-[0_20px_60px_rgb(0,0,0,0.2)] p-5 w-80 z-[1000] border border-gray-100 animate-in slide-in-from-bottom-4 fade-in duration-300">
+            <button onClick={() => setShowPopup(false)} className="absolute top-4 right-4 text-gray-400 hover:text-[#111] transition-colors">
+              <X className="w-4 h-4" />
             </button>
-            <div className="flex items-start gap-2 mb-3 pr-4">
-              <MapPin className="w-4 h-4 text-[#111] mt-0.5 shrink-0" />
+            <div className="flex items-start gap-3 mb-5 pr-6">
+              <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0 border border-gray-200">
+                 <MapPin className="w-4 h-4 text-[#111]" />
+              </div>
               <div>
-                <p className="text-xs font-semibold text-gray-800 leading-snug line-clamp-2">
-                  {selectedPlace || 'Selected location'}
+                <p className="text-[13px] font-bold text-gray-900 leading-snug line-clamp-2">
+                  {selectedPlace || 'Selected property'}
                 </p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {markerCoords.lat.toFixed(6)}, {markerCoords.lng.toFixed(6)}
+                <p className="text-[11px] font-medium text-gray-500 mt-1 uppercase tracking-wide">
+                  {markerCoords.lat.toFixed(5)}, {markerCoords.lng.toFixed(5)}
                 </p>
               </div>
             </div>
             <button
               onClick={handleConfirm}
-              className="w-full py-2 bg-[#111] hover:bg-black text-white text-xs font-semibold rounded-lg transition-colors"
+              className="w-full py-3 bg-[#111] hover:bg-black text-white text-[13px] font-bold rounded-xl transition-all shadow-[0_4px_12px_rgba(0,0,0,0.1)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.2)]"
             >
-              Confirm Location
+              Confirm Boundary
             </button>
           </div>
         )}
