@@ -32,7 +32,7 @@ function ValueRangeCard({ data }: { data: ValuationResult }) {
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.8, delay: 0.2, ease: 'easeOut' }}
-              className="text-4xl font-extrabold text-indigo-600"
+              className="text-4xl font-extrabold text-[#111]"
             >
               {formatCurrencyShort(data.valueRangeHigh)}
             </motion.div>
@@ -69,7 +69,7 @@ function ConfidenceCard({ data }: { data: ValuationResult }) {
   return (
     <Card>
       <div className="flex items-center gap-2 mb-4">
-        <Shield className="w-4 h-4 text-indigo-500" />
+        <Shield className="w-4 h-4 text-[#111]" />
         <span className="text-sm font-semibold text-gray-800">Confidence Score</span>
       </div>
       <div className="flex flex-col items-center relative mb-4">
@@ -81,7 +81,7 @@ function ConfidenceCard({ data }: { data: ValuationResult }) {
             <span className="text-xs text-gray-500 w-36 shrink-0">{item.label}</span>
             <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
               <motion.div
-                className="h-full bg-indigo-500 rounded-full"
+                className="h-full bg-gray-500 rounded-full"
                 initial={{ width: 0 }}
                 animate={{ width: `${item.score}%` }}
                 transition={{ duration: 1, delay: 0.3 }}
@@ -130,7 +130,7 @@ function LiquidityCard({ data }: { data: ValuationResult }) {
   return (
     <Card>
       <div className="flex items-center gap-2 mb-4">
-        <Droplets className="w-4 h-4 text-indigo-500" />
+        <Droplets className="w-4 h-4 text-[#111]" />
         <span className="text-sm font-semibold text-gray-800">Liquidity Score</span>
       </div>
       <div className="flex flex-col items-center relative mb-4">
@@ -199,7 +199,7 @@ function ValueDriversCard({ data }: { data: ValuationResult }) {
   return (
     <Card className="col-span-full lg:col-span-2">
       <div className="flex items-center gap-2 mb-4">
-        <TrendingUp className="w-4 h-4 text-indigo-500" />
+        <TrendingUp className="w-4 h-4 text-[#111]" />
         <span className="text-sm font-semibold text-gray-800">Value Drivers</span>
       </div>
       <div className="space-y-3">
@@ -211,7 +211,7 @@ function ValueDriversCard({ data }: { data: ValuationResult }) {
             </div>
             <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
               <motion.div
-                className="h-full bg-indigo-500 rounded-full"
+                className="h-full bg-gray-500 rounded-full"
                 initial={{ width: 0 }}
                 animate={{ width: `${driver.weight}%` }}
                 transition={{ duration: 0.8, delay: i * 0.1 }}
@@ -229,7 +229,7 @@ function ComparablesCard({ data }: { data: ValuationResult }) {
   return (
     <Card className="col-span-full">
       <div className="flex items-center gap-2 mb-4">
-        <Info className="w-4 h-4 text-indigo-500" />
+        <Info className="w-4 h-4 text-[#111]" />
         <span className="text-sm font-semibold text-gray-800">Comparable Transactions</span>
         <span className="ml-auto text-xs text-gray-400">{data.comparables?.length || 0} comps found</span>
       </div>
@@ -250,7 +250,7 @@ function ComparablesCard({ data }: { data: ValuationResult }) {
               <tr key={i} className="border-b border-gray-50 text-gray-700 hover:bg-gray-50 transition-colors">
                 <td className="py-2 pr-4 capitalize">{comp.propertyType} – {comp.quality}</td>
                 <td className="text-right pr-4">{comp.area?.toLocaleString('en-IN')}</td>
-                <td className="text-right pr-4 text-indigo-600">₹{comp.pricePerSqft?.toLocaleString('en-IN')}</td>
+                <td className="text-right pr-4 text-[#111]">₹{comp.pricePerSqft?.toLocaleString('en-IN')}</td>
                 <td className="text-right pr-4">{formatCurrencyShort(comp.price)}</td>
                 <td className="text-right pr-4">{comp.age}</td>
                 <td className="text-right text-gray-400">{comp.transactionDate ? new Date(comp.transactionDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }) : '—'}</td>
@@ -267,7 +267,7 @@ function AuditTrailCard({ data }: { data: ValuationResult }) {
   return (
     <Card className="col-span-full">
       <div className="flex items-center gap-2 mb-4">
-        <Clock className="w-4 h-4 text-indigo-500" />
+        <Clock className="w-4 h-4 text-[#111]" />
         <span className="text-sm font-semibold text-gray-800">Audit Trail</span>
         <span className="ml-auto text-xs text-gray-400">Total: {data.processingTime}ms</span>
       </div>
@@ -279,7 +279,7 @@ function AuditTrailCard({ data }: { data: ValuationResult }) {
               <span className="text-sm text-gray-800 font-medium">{entry.engine}</span>
               <span className="text-xs text-gray-400 ml-2">{formatDate(entry.timestamp)}</span>
             </div>
-            <span className="text-xs text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">{entry.duration}ms</span>
+            <span className="text-xs text-[#111] bg-gray-50 px-2 py-0.5 rounded-full">{entry.duration}ms</span>
           </div>
         ))}
       </div>
@@ -310,7 +310,7 @@ export default function ValuationDashboard() {
   if (isError || !valuation) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-red-500">Failed to load valuation. <button className="text-indigo-600 underline" onClick={() => navigate('/app/new-applicant')}>Go back</button></div>
+        <div className="text-red-500">Failed to load valuation. <button className="text-[#111] underline" onClick={() => navigate('/app/new-applicant')}>Go back</button></div>
       </div>
     );
   }
@@ -336,11 +336,11 @@ export default function ValuationDashboard() {
               <FileText className="w-4 h-4" />
               Full Report
             </button>
-            <button onClick={() => navigate('/app/new-applicant')} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-sm text-indigo-600 border border-indigo-200 transition-colors">
+            <button onClick={() => navigate('/app/new-applicant')} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gray-50 hover:bg-gray-100 text-sm text-[#111] border border-gray-200 transition-colors">
               <RefreshCw className="w-4 h-4" />
               Re-evaluate
             </button>
-            <button onClick={() => window.print()} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-sm text-white transition-colors shadow-sm">
+            <button onClick={() => window.print()} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#111] hover:bg-black text-sm text-white transition-colors shadow-sm">
               <Download className="w-4 h-4" />
               Download
             </button>

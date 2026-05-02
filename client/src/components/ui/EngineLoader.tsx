@@ -25,9 +25,9 @@ export function EngineLoader() {
     <div className="fixed inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="bg-white border border-gray-200 rounded-2xl p-8 w-full max-w-md shadow-xl">
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
             <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}>
-              <Loader2 className="w-5 h-5 text-indigo-600" />
+              <Loader2 className="w-5 h-5 text-[#111]" />
             </motion.div>
           </div>
           <div>
@@ -48,7 +48,7 @@ export function EngineLoader() {
                     <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
                   ) : (
                     <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.8, ease: 'linear' }} className="shrink-0">
-                      <Loader2 className="w-4 h-4 text-indigo-600" />
+                      <Loader2 className="w-4 h-4 text-[#111]" />
                     </motion.div>
                   )}
                   <span className={`text-sm ${i < step ? 'text-emerald-600' : 'text-gray-800'}`}>{engine}</span>
@@ -60,7 +60,7 @@ export function EngineLoader() {
         <div className="mt-6">
           <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
             <motion.div
-              className="h-full bg-indigo-600 rounded-full"
+              className="h-full bg-[#111] rounded-full"
               animate={{ width: `${((step + 1) / ENGINES.length) * 100}%` }}
               transition={{ duration: 0.5 }}
             />

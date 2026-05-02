@@ -89,7 +89,7 @@ interface LinePoint { label: string; value: number; value2?: number }
 
 function AreaChartSVG({
   data,
-  color1 = '#6366f1',
+  color1 = '#111111',
   color2,
   height = 180,
 }: {
@@ -221,8 +221,8 @@ function OgiveSVG({ data, total, height = 200 }: { data: OgivePoint[]; total: nu
     <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
       <defs>
         <linearGradient id="ogive-grad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#6366f1" stopOpacity="0.2" />
-          <stop offset="100%" stopColor="#6366f1" stopOpacity="0.01" />
+          <stop offset="0%" stopColor="#111111" stopOpacity="0.2" />
+          <stop offset="100%" stopColor="#111111" stopOpacity="0.01" />
         </linearGradient>
       </defs>
       {yTicks.map(t => (
@@ -234,13 +234,13 @@ function OgiveSVG({ data, total, height = 200 }: { data: OgivePoint[]; total: nu
         <line key={t} x1={px(t)} y1={PAD.top} x2={px(t)} y2={PAD.top + cH} stroke="#f1f5f9" strokeWidth={0.8} />
       ))}
       <path d={areaClose} fill="url(#ogive-grad)" />
-      <line x1={px(medianX)} y1={py(50)} x2={px(medianX)} y2={PAD.top + cH} stroke="#6366f1" strokeWidth={1} strokeDasharray="4,3" opacity={0.5} />
-      <line x1={PAD.left} y1={py(50)} x2={px(medianX)} y2={py(50)} stroke="#6366f1" strokeWidth={1} strokeDasharray="4,3" opacity={0.5} />
-      <text x={px(medianX) + 4} y={py(50) - 5} fontSize={8} fill="#6366f1" fontWeight="600">P50 ≈ {Math.round(medianX)}</text>
-      <path d={pathD} fill="none" stroke="#6366f1" strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
+      <line x1={px(medianX)} y1={py(50)} x2={px(medianX)} y2={PAD.top + cH} stroke="#111111" strokeWidth={1} strokeDasharray="4,3" opacity={0.5} />
+      <line x1={PAD.left} y1={py(50)} x2={px(medianX)} y2={py(50)} stroke="#111111" strokeWidth={1} strokeDasharray="4,3" opacity={0.5} />
+      <text x={px(medianX) + 4} y={py(50) - 5} fontSize={8} fill="#111111" fontWeight="600">P50 ≈ {Math.round(medianX)}</text>
+      <path d={pathD} fill="none" stroke="#111111" strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
       {rawPoints.slice(1).map((pt, i) => (
         <g key={i}>
-          <circle cx={px(pt.x)} cy={py(pt.y)} r={5} fill="white" stroke="#6366f1" strokeWidth={2} />
+          <circle cx={px(pt.x)} cy={py(pt.y)} r={5} fill="white" stroke="#111111" strokeWidth={2} />
           <text x={px(pt.x)} y={py(pt.y) - 9} textAnchor="middle" fontSize={8} fontWeight="700" fill="#4f46e5">{pt.pct}%</text>
         </g>
       ))}
@@ -378,18 +378,18 @@ export default function Dashboard() {
         {/* HEADER */}
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-xs font-semibold text-indigo-500 uppercase tracking-widest mb-1">Overview</p>
+            <p className="text-xs font-semibold text-[#111] uppercase tracking-widest mb-1">Overview</p>
             <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
               Welcome back, {user?.name?.split(' ')[0] || 'there'} 👋
             </h1>
             <p className="text-sm text-gray-400 mt-1">
               {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-              {' · '}<span className="text-indigo-500 font-medium">{total} valuations</span> in portfolio
+              {' · '}<span className="text-[#111] font-medium">{total} valuations</span> in portfolio
             </p>
           </div>
           <button
             onClick={() => navigate('/app/new-applicant')}
-            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm shadow-indigo-200"
+            className="flex items-center gap-2 px-5 py-2.5 bg-[#111] hover:bg-black text-white text-sm font-semibold rounded-xl transition-colors shadow-sm shadow-gray-200"
           >
             + New Valuation
           </button>
@@ -398,7 +398,7 @@ export default function Dashboard() {
         {/* TOP KPI CARDS */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard label="Total Valuations" value={isLoading ? '—' : total} sub="All time submissions"
-            icon={BarChart3} iconColor="text-indigo-600" iconBg="bg-indigo-50" delay={0} />
+            icon={BarChart3} iconColor="text-[#111]" iconBg="bg-gray-50" delay={0} />
           <KpiCard label="Avg Confidence Score" value={isLoading ? '—' : `${avgConf}%`} sub="Engine model accuracy"
             icon={Shield} iconColor="text-emerald-600" iconBg="bg-emerald-50" trend="up" trendLabel="Good" delay={0.06} />
           <KpiCard label="Avg Market Value" value={isLoading ? '—' : formatCurrencyShort(avgMarketValue)} sub="Across all properties"
@@ -437,7 +437,7 @@ export default function Dashboard() {
               <h2 className="text-sm font-bold text-gray-800">Monthly Valuation Trend</h2>
               <p className="text-xs text-gray-400 mt-0.5">Submissions (solid) vs Avg Confidence % (dashed)</p>
             </div>
-            <span className="text-xs bg-indigo-50 text-indigo-600 font-semibold px-2.5 py-1 rounded-lg">Last 8 months</span>
+            <span className="text-xs bg-gray-50 text-[#111] font-semibold px-2.5 py-1 rounded-lg">Last 8 months</span>
           </div>
           <div className="h-40">
             {isLoading ? (
@@ -445,12 +445,12 @@ export default function Dashboard() {
             ) : trendData.length < 2 ? (
               <div className="h-full flex items-center justify-center text-gray-300 text-sm">No data yet</div>
             ) : (
-              <AreaChartSVG data={trendData} color1="#6366f1" color2="#10b981" height={160} />
+              <AreaChartSVG data={trendData} color1="#111111" color2="#10b981" height={160} />
             )}
           </div>
           <div className="flex items-center gap-5 mt-2">
             <span className="flex items-center gap-1.5 text-xs text-gray-500">
-              <span className="w-4 h-0.5 bg-indigo-500 inline-block rounded" /> Valuations
+              <span className="w-4 h-0.5 bg-gray-500 inline-block rounded" /> Valuations
             </span>
             <span className="flex items-center gap-1.5 text-xs text-gray-500">
               <span className="w-4 border-t border-dashed border-emerald-500 inline-block" /> Avg Confidence
@@ -529,7 +529,7 @@ export default function Dashboard() {
                 <h2 className="text-sm font-bold text-gray-800">Confidence Ogive</h2>
                 <p className="text-xs text-gray-400 mt-0.5">Cumulative frequency S-curve</p>
               </div>
-              <span className="text-[9px] bg-indigo-50 text-indigo-500 font-bold px-1.5 py-0.5 rounded">S-CURVE</span>
+              <span className="text-[9px] bg-gray-50 text-[#111] font-bold px-1.5 py-0.5 rounded">S-CURVE</span>
             </div>
             <div className="h-40">
               {isLoading ? (
@@ -542,10 +542,10 @@ export default function Dashboard() {
             </div>
             <div className="flex items-center gap-3 mt-2">
               <span className="flex items-center gap-1 text-[10px] text-gray-500">
-                <span className="w-3 h-0.5 bg-indigo-500 inline-block rounded" /> Cum. %
+                <span className="w-3 h-0.5 bg-gray-500 inline-block rounded" /> Cum. %
               </span>
               <span className="flex items-center gap-1 text-[10px] text-gray-500">
-                <span className="w-3 border-t border-dashed border-indigo-400 inline-block" /> P50
+                <span className="w-3 border-t border-dashed border-gray-900 inline-block" /> P50
               </span>
             </div>
           </div>
@@ -556,7 +556,7 @@ export default function Dashboard() {
           {[
             { label: 'Overpriced Flags', value: overpricedCount, sub: `${pct(overpricedCount, total)}% flagged`, icon: XCircle, iconColor: 'text-amber-500', iconBg: 'bg-amber-50', border: 'border-amber-100' },
             { label: 'Caution Cases', value: cautionCount, sub: `${pct(cautionCount, total)}% of total`, icon: AlertTriangle, iconColor: 'text-amber-600', iconBg: 'bg-amber-50', border: 'border-amber-100' },
-            { label: 'Reports Generated', value: total, sub: 'Full valuation reports', icon: FileText, iconColor: 'text-indigo-600', iconBg: 'bg-indigo-50', border: 'border-indigo-100' },
+            { label: 'Reports Generated', value: total, sub: 'Full valuation reports', icon: FileText, iconColor: 'text-[#111]', iconBg: 'bg-gray-50', border: 'border-gray-200' },
             { label: 'Avg Processing', value: `${avgProcessing}ms`, sub: 'Engine response time', icon: Clock, iconColor: 'text-sky-600', iconBg: 'bg-sky-50', border: 'border-sky-100' },
           ].map((s, i) => (
             <motion.div key={s.label}
@@ -578,8 +578,8 @@ export default function Dashboard() {
         <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-indigo-50 flex items-center justify-center">
-                <TrendingUp className="w-4 h-4 text-indigo-500" />
+              <div className="w-8 h-8 rounded-xl bg-gray-50 flex items-center justify-center">
+                <TrendingUp className="w-4 h-4 text-[#111]" />
               </div>
               <div>
                 <h2 className="text-sm font-bold text-gray-800">Recent Valuations</h2>
@@ -588,7 +588,7 @@ export default function Dashboard() {
             </div>
             <button
               onClick={() => navigate('/app/history')}
-              className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors"
+              className="flex items-center gap-1.5 text-xs font-semibold text-[#111] hover:text-black bg-gray-50 hover:bg-gray-100 px-3 py-1.5 rounded-lg transition-colors"
             >
               View all <ArrowRight className="w-3 h-3" />
             </button>
@@ -600,7 +600,7 @@ export default function Dashboard() {
             <div className="py-12 text-center">
               <Building2 className="w-10 h-10 text-gray-200 mx-auto mb-3" />
               <p className="text-sm font-medium text-gray-400">No valuations yet</p>
-              <button onClick={() => navigate('/app/new-applicant')} className="mt-3 text-xs text-indigo-600 hover:underline font-medium">
+              <button onClick={() => navigate('/app/new-applicant')} className="mt-3 text-xs text-[#111] hover:underline font-medium">
                 + Add your first applicant
               </button>
             </div>
@@ -620,8 +620,8 @@ export default function Dashboard() {
                     onClick={() => navigate(`/app/dashboard/${v._id}`)}
                     className="grid grid-cols-12 gap-4 items-center px-6 py-4 hover:bg-gray-50 cursor-pointer transition-colors">
                     <div className="col-span-4 flex items-center gap-3 min-w-0">
-                      <div className="w-9 h-9 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
-                        <Building2 className="w-4 h-4 text-indigo-500" />
+                      <div className="w-9 h-9 rounded-xl bg-gray-50 flex items-center justify-center shrink-0">
+                        <Building2 className="w-4 h-4 text-[#111]" />
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-gray-800 capitalize truncate">

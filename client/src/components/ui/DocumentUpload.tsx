@@ -126,8 +126,8 @@ export function DocumentUpload({ onExtracted }: DocumentUploadProps) {
           onClick={() => inputRef.current?.click()}
           className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all ${
             dragging
-              ? 'border-indigo-400 bg-indigo-50'
-              : 'border-gray-200 hover:border-indigo-300 hover:bg-gray-50'
+              ? 'border-gray-900 bg-gray-50'
+              : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
           }`}
         >
           <input
@@ -138,8 +138,8 @@ export function DocumentUpload({ onExtracted }: DocumentUploadProps) {
             onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }}
           />
           <div className="flex items-center justify-center gap-2 mb-2">
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-indigo-500" />
+            <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center">
+              <Sparkles className="w-4 h-4 text-[#111]" />
             </div>
           </div>
           <p className="text-sm font-semibold text-gray-700">Auto-fill from Document</p>
@@ -157,27 +157,27 @@ export function DocumentUpload({ onExtracted }: DocumentUploadProps) {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="border border-indigo-100 bg-indigo-50 rounded-xl p-4"
+            className="border border-gray-200 bg-gray-50 rounded-xl p-4"
           >
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-white border border-indigo-100 flex items-center justify-center shrink-0">
+              <div className="w-9 h-9 rounded-lg bg-white border border-gray-200 flex items-center justify-center shrink-0">
                 {file.type === 'application/pdf'
-                  ? <FileText className="w-4 h-4 text-indigo-500" />
-                  : <Image className="w-4 h-4 text-indigo-500" />
+                  ? <FileText className="w-4 h-4 text-[#111]" />
+                  : <Image className="w-4 h-4 text-[#111]" />
                 }
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-gray-800 truncate">{file.name}</p>
-                <p className="text-[10px] text-indigo-500 mt-0.5 flex items-center gap-1">
+                <p className="text-[10px] text-[#111] mt-0.5 flex items-center gap-1">
                   <Loader2 className="w-3 h-3 animate-spin" />
                   Running OCR extraction…
                 </p>
               </div>
             </div>
             {/* Animated progress bar */}
-            <div className="mt-3 h-1 bg-indigo-100 rounded-full overflow-hidden">
+            <div className="mt-3 h-1 bg-gray-100 rounded-full overflow-hidden">
               <motion.div
-                className="h-full bg-indigo-500 rounded-full"
+                className="h-full bg-gray-500 rounded-full"
                 initial={{ width: '0%' }}
                 animate={{ width: '90%' }}
                 transition={{ duration: 4, ease: 'easeOut' }}
@@ -271,7 +271,7 @@ export function DocumentUpload({ onExtracted }: DocumentUploadProps) {
             <div className="px-4 pb-4">
               <button
                 onClick={handleApply}
-                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
+                className="w-full py-2.5 bg-[#111] hover:bg-black text-white text-xs font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 Apply {result.extractedCount} fields to form

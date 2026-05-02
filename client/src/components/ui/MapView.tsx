@@ -13,9 +13,9 @@ import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
 L.Icon.Default.mergeOptions({ iconUrl: markerIcon, iconRetinaUrl: markerIcon2x, shadowUrl: markerShadow });
 
-const indigoIcon = L.divIcon({
+const darkIcon = L.divIcon({
   className: '',
-  html: `<div style="width:28px;height:28px;background:#6366f1;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:3px solid white;box-shadow:0 2px 10px rgba(99,102,241,0.6);"></div>`,
+  html: `<div style="width:28px;height:28px;background:#111111;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:3px solid white;box-shadow:0 2px 10px rgba(0,0,0,0.6);"></div>`,
   iconSize: [28, 28],
   iconAnchor: [14, 28],
   popupAnchor: [0, -32],
@@ -96,7 +96,7 @@ export function MapView({ onLocationConfirm, searchLocation }: MapViewProps) {
   const placeMarker = useCallback((lat: number, lng: number) => {
     if (!mapRef.current) return;
     if (markerRef.current) markerRef.current.remove();
-    markerRef.current = L.marker([lat, lng], { icon: indigoIcon }).addTo(mapRef.current);
+    markerRef.current = L.marker([lat, lng], { icon: darkIcon }).addTo(mapRef.current);
     setMarkerCoords({ lat, lng });
     setShowPopup(true);
   }, []);
@@ -327,7 +327,7 @@ export function MapView({ onLocationConfirm, searchLocation }: MapViewProps) {
         <div className="flex-1 relative">
           <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 shadow-sm">
             {searching || autoLocating
-              ? <Loader2 className="w-4 h-4 text-indigo-400 shrink-0 animate-spin" />
+              ? <Loader2 className="w-4 h-4 text-gray-600 shrink-0 animate-spin" />
               : <Search className="w-4 h-4 text-gray-400 shrink-0" />
             }
             <input
@@ -345,14 +345,14 @@ export function MapView({ onLocationConfirm, searchLocation }: MapViewProps) {
             )}
             <button
               onClick={handleSearchEnter}
-              className="shrink-0 px-2 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded-md transition-colors"
+              className="shrink-0 px-2 py-0.5 bg-[#111] hover:bg-black text-white text-xs rounded-md transition-colors"
             >
               Go
             </button>
           </div>
 
           {autoLocating && (
-            <p className="text-[10px] text-indigo-500 mt-1 px-1 flex items-center gap-1">
+            <p className="text-[10px] text-[#111] mt-1 px-1 flex items-center gap-1">
               <Loader2 className="w-3 h-3 animate-spin" />
               Locating {searchLocation}...
             </p>
@@ -364,9 +364,9 @@ export function MapView({ onLocationConfirm, searchLocation }: MapViewProps) {
                 <button
                   key={s.id}
                   onClick={() => selectSuggestion(s)}
-                  className="w-full flex items-start gap-2 px-3 py-2.5 hover:bg-indigo-50 text-left border-b border-gray-50 last:border-0 transition-colors"
+                  className="w-full flex items-start gap-2 px-3 py-2.5 hover:bg-gray-50 text-left border-b border-gray-50 last:border-0 transition-colors"
                 >
-                  <MapPin className="w-3.5 h-3.5 text-indigo-500 mt-0.5 shrink-0" />
+                  <MapPin className="w-3.5 h-3.5 text-[#111] mt-0.5 shrink-0" />
                   <span className="text-xs text-gray-700 leading-relaxed line-clamp-2">{s.display_name}</span>
                 </button>
               ))}
@@ -379,8 +379,8 @@ export function MapView({ onLocationConfirm, searchLocation }: MapViewProps) {
           onClick={() => setIsSatellite(v => !v)}
           className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition-all ${
             isSatellite
-              ? 'bg-indigo-600 border-indigo-600 text-white'
-              : 'bg-white border-gray-200 text-gray-600 hover:border-indigo-300'
+              ? 'bg-[#111] border-[#111] text-white'
+              : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
           }`}
         >
           {isSatellite ? <Map className="w-3.5 h-3.5" /> : <Satellite className="w-3.5 h-3.5" />}
@@ -404,7 +404,7 @@ export function MapView({ onLocationConfirm, searchLocation }: MapViewProps) {
               <X className="w-3.5 h-3.5" />
             </button>
             <div className="flex items-start gap-2 mb-3 pr-4">
-              <MapPin className="w-4 h-4 text-indigo-500 mt-0.5 shrink-0" />
+              <MapPin className="w-4 h-4 text-[#111] mt-0.5 shrink-0" />
               <div>
                 <p className="text-xs font-semibold text-gray-800 leading-snug line-clamp-2">
                   {selectedPlace || 'Selected location'}
@@ -416,7 +416,7 @@ export function MapView({ onLocationConfirm, searchLocation }: MapViewProps) {
             </div>
             <button
               onClick={handleConfirm}
-              className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors"
+              className="w-full py-2 bg-[#111] hover:bg-black text-white text-xs font-semibold rounded-lg transition-colors"
             >
               Confirm Location
             </button>

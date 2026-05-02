@@ -7,7 +7,7 @@ interface GaugeChartProps {
   size?: number;
 }
 
-export function GaugeChart({ value, label, color = '#6366f1', size = 140 }: GaugeChartProps) {
+export function GaugeChart({ value, label, color = '#111111', size = 140 }: GaugeChartProps) {
   const strokeWidth = 12;
   const radius = (size - strokeWidth) / 2;
   const circumference = Math.PI * radius;

@@ -11,7 +11,7 @@ import { Badge } from '../components/ui/Badge';
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="mb-8 print:mb-6">
-      <h2 className="text-base font-bold text-gray-900 border-b border-indigo-100 pb-2 mb-4">{title}</h2>
+      <h2 className="text-base font-bold text-gray-900 border-b border-gray-200 pb-2 mb-4">{title}</h2>
       {children}
     </div>
   );
@@ -50,7 +50,7 @@ export default function FullReport() {
           <button onClick={() => navigate(`/app/dashboard/${id}`)} className="flex items-center gap-2 text-gray-400 hover:text-gray-700 text-sm transition-colors">
             <ArrowLeft className="w-4 h-4" /> Back to Dashboard
           </button>
-          <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg transition-colors">
+          <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-[#111] hover:bg-black text-white text-sm rounded-lg transition-colors">
             <Printer className="w-4 h-4" /> Print / Export PDF
           </button>
         </div>
@@ -59,14 +59,14 @@ export default function FullReport() {
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="rounded-2xl border border-gray-200 bg-white p-8 mb-6 shadow-sm">
           <div className="flex justify-between items-start flex-wrap gap-4">
             <div>
-              <div className="text-xs text-indigo-600 uppercase tracking-widest mb-2">COVAL Collateral Valuation Report</div>
+              <div className="text-xs text-[#111] uppercase tracking-widest mb-2">COVAL Collateral Valuation Report</div>
               <h1 className="text-3xl font-extrabold text-gray-900 mb-1 capitalize">{p?.propertyType} Property</h1>
               <p className="text-gray-500">{p?.locality}, {p?.city}</p>
               <p className="text-xs text-gray-400 mt-1">Report ID: {id} • Generated: {formatDate(v.createdAt)}</p>
             </div>
             <div className="text-right">
               <p className="text-xs text-gray-400 mb-1">Assessed Value Range</p>
-              <p className="text-2xl font-bold text-indigo-600">{formatCurrencyShort(v.valueRangeLow)} – {formatCurrencyShort(v.valueRangeHigh)}</p>
+              <p className="text-2xl font-bold text-[#111]">{formatCurrencyShort(v.valueRangeLow)} – {formatCurrencyShort(v.valueRangeHigh)}</p>
               <Badge variant={v.overallRiskLabel}>{v.overallRiskLabel?.replace('_', ' ').toUpperCase()}</Badge>
             </div>
           </div>
@@ -78,7 +78,7 @@ export default function FullReport() {
             <p className="text-sm text-gray-600 leading-relaxed">
               COVAL has assessed a <strong className="text-gray-900">{p?.area?.toLocaleString('en-IN')} sqft {p?.propertyType}</strong> property located at <strong className="text-gray-900">{p?.locality}, {p?.city}</strong>,
               constructed in <strong className="text-gray-900">{p?.yearOfConstruction || 'N/A'}</strong>, with <strong className="text-gray-900">{p?.constructionQuality}</strong> quality construction.
-              The AI-assessed market value ranges from <strong className="text-indigo-600">{formatCurrencyShort(v.valueRangeLow)}</strong> to <strong className="text-indigo-600">{formatCurrencyShort(v.valueRangeHigh)}</strong> (base: {formatCurrencyShort(v.marketValue)}).
+              The AI-assessed market value ranges from <strong className="text-[#111]">{formatCurrencyShort(v.valueRangeLow)}</strong> to <strong className="text-[#111]">{formatCurrencyShort(v.valueRangeHigh)}</strong> (base: {formatCurrencyShort(v.marketValue)}).
               Distress/liquidation value is estimated at <strong className="text-amber-600">{formatCurrency(v.distressValue)}</strong>.
               The overall risk classification is <strong className="text-gray-900 capitalize">{v.overallRiskLabel?.replace('_', ' ')}</strong> with a confidence score of <strong className="text-gray-900">{v.confidenceScore}%</strong>.
             </p>
@@ -87,7 +87,7 @@ export default function FullReport() {
           {/* Methodology */}
           <Section title="2. Valuation Methodology">
             <p className="text-sm text-gray-500 mb-3">The valuation uses a rule-based comparable analysis engine with the following formula:</p>
-            <div className="bg-gray-50 rounded-lg p-4 font-mono text-xs text-indigo-600 mb-3 border border-gray-100">
+            <div className="bg-gray-50 rounded-lg p-4 font-mono text-xs text-[#111] mb-3 border border-gray-100">
               marketValue = (pricePerSqft × area) × locationMultiplier × ageDepreciation × qualityMultiplier
             </div>
             <div className="space-y-1">
@@ -245,7 +245,7 @@ export default function FullReport() {
                 <div key={i} className="flex items-center justify-between p-2.5 rounded-lg bg-gray-50 border border-gray-100 text-xs">
                   <span className="text-gray-800 font-medium">{entry.engine}</span>
                   <span className="text-gray-400">{formatDate(entry.timestamp)}</span>
-                  <span className="text-indigo-600">{entry.duration}ms</span>
+                  <span className="text-[#111]">{entry.duration}ms</span>
                 </div>
               ))}
               <div className="text-xs text-gray-400 pt-1">Total processing time: {v.processingTime}ms</div>
