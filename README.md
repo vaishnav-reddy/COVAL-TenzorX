@@ -9,7 +9,7 @@
 <p><strong>Built for the TenzorX Hackathon 2026 · Poonawalla Fincorp Challenge</strong></p>
 
 [Live Demo](https://coval.onrender.com/)
-[Watch Demo](https://github.com/vaishnav-reddy/COVAL)
+[Watch Demo](https://www.youtube.com/watch?v=S0VK7zplLUU)
 
 <br/>
 
