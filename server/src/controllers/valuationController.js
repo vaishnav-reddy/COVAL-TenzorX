@@ -103,12 +103,10 @@ async function createValuation(req, res, next) {
 
     // 2. Valuation — uses real-time comparables for Sales Comparison Approach
     const valuationResult = valuationEngine.run(propertyData, marketData, comparables);
-    console.log('Valuation engine result:', JSON.stringify(valuationResult, null, 2));
     auditTrail.push({ engine: 'ValuationEngine', timestamp: new Date(), duration: valuationResult.duration, output: valuationResult });
 
     // Safety check for valuation results
     if (!valuationResult || isNaN(valuationResult.marketValue) || !isFinite(valuationResult.marketValue)) {
-      console.error('Invalid valuation result:', valuationResult);
       throw new Error('Valuation engine returned invalid results');
     }
 
@@ -176,6 +174,20 @@ async function createValuation(req, res, next) {
       // Borrower Credit & LTV (Problem Statement Requirement)
       creditScoring: riskResult.creditScoring || {},
       adjustedLTV: riskResult.creditScoring?.ltvAdjustment?.adjusted || 0.75,
+      creditRiskAdjustment: riskResult.creditScoring?.riskAdjustment?.totalAdjustment || 0,
+      loanRecommendations: riskResult.creditScoring?.loanRecommendations || [],
+
+      // Market Data Snapshot (for dashboard display)
+      marketData,
+      marketActivityProxies: marketData.marketActivityProxies || null,
+      compositeLocationScore: marketData.demandIndex ? Math.round((marketData.demandIndex / 10) * 100) : null,
+
+      // Additional engine outputs
+      propertyAge: valuationResult.propertyAge || null,
+      declaredVsMarketDeviation: valuationResult.declaredVsMarketDeviation || 0,
+      overCircleRatePercent: valuationResult.overCircleRatePercent || 0,
+      overPricedFlag: valuationResult.overPricedFlag || false,
+      liquidityBreakdown: liquidityResultFinal.breakdown || {},
       
       comparables,
       auditTrail,

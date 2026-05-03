@@ -79,7 +79,6 @@ interface FormState {
   
   // Applicant Information
   applicantName: string;
-  applicantEmail: string;
   applicantPhone: string;
   applicantPAN: string;
   
@@ -117,7 +116,6 @@ const INITIAL_FORM: FormState = {
   purpose: 'lap',
   marketScenario: 'normal',
   applicantName: '',
-  applicantEmail: '',
   applicantPhone: '',
   applicantPAN: '',
   hasMunicipalApproval: true,
@@ -283,12 +281,23 @@ export default function PropertyForm() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validate required fields
-    const requiredFields = ['location', 'area', 'loanAmountRequired', 'applicantName', 'applicantEmail', 'applicantPhone'];
-    const missingFields = requiredFields.filter(field => !form[field as keyof FormState]);
-    
-    if (missingFields.length > 0) {
-      toast.error('Please fill all required fields');
+    // Validate required fields with user-friendly names
+    const requiredChecks: { field: keyof FormState; label: string }[] = [
+      { field: 'propertyType',       label: 'Property Type' },
+      { field: 'location',           label: 'Full Address' },
+      { field: 'area',               label: 'Area (sqft)' },
+      { field: 'loanAmountRequired', label: 'Loan Amount Required' },
+      { field: 'applicantName',      label: 'Full Legal Name' },
+      { field: 'applicantPhone',     label: 'Contact Phone' },
+    ];
+
+    const missing = requiredChecks.filter(({ field }) => {
+      const val = form[field];
+      return !val || (typeof val === 'string' && val.trim() === '');
+    });
+
+    if (missing.length > 0) {
+      toast.error(`Please fill: ${missing.map(m => m.label).join(', ')}`);
       return;
     }
 
@@ -326,7 +335,7 @@ export default function PropertyForm() {
     fields: Record<string, unknown>,
     confidenceMap: Record<string, { confidence: 'high' | 'medium' | 'low'; source: string }>
   ) {
-    // Build location string: prefer "locality, city", fallback to just city
+    // Build location string from city + locality
     const locality = fields.locality as string | undefined;
     const city     = fields.city     as string | undefined;
     const locationStr = locality
@@ -335,22 +344,32 @@ export default function PropertyForm() {
 
     setForm(f => ({
       ...f,
+      // Property classification
       ...(fields.propertyType        ? { propertyType:        fields.propertyType as string }        : {}),
+      ...(fields.propertySubType     ? { propertySubType:     fields.propertySubType as string }     : {}),
+      ...(fields.purpose             ? { purpose:             fields.purpose as FormState['purpose'] } : {}),
+      ...(fields.loanAmountRequired  ? { loanAmountRequired:  String(fields.loanAmountRequired) }    : {}),
+      // Location
       ...(locationStr                ? { location: locationStr }                                      : {}),
       ...(fields.pincode             ? { pincode:             fields.pincode as string }              : {}),
+      // Structural
       ...(fields.area                ? { area:                String(fields.area) }                   : {}),
+      ...(fields.areaType            ? { areaType:            fields.areaType as FormState['areaType'] } : {}),
       ...(fields.yearOfConstruction  ? { yearOfConstruction:  String(fields.yearOfConstruction) }     : {}),
       ...(fields.floorNumber !== undefined && fields.floorNumber !== null ? { floorNumber: String(fields.floorNumber) } : {}),
       ...(fields.totalFloors         ? { totalFloors:         String(fields.totalFloors) }            : {}),
       ...(fields.constructionQuality ? { constructionQuality: fields.constructionQuality as string }  : {}),
-      ...(fields.declaredValue       ? { declaredValue:       String(fields.declaredValue) }          : {}),
+      ...(fields.amenities && Array.isArray(fields.amenities) && (fields.amenities as string[]).length > 0
+          ? { amenities: fields.amenities as string[] } : {}),
+      // Legal
+      ...(fields.ownershipType       ? { ownershipType:       fields.ownershipType as FormState['ownershipType'] } : {}),
+      ...(fields.titleClarity        ? { titleClarity:        fields.titleClarity as FormState['titleClarity'] }   : {}),
+      ...(fields.occupancyStatus     ? { occupancyStatus:     fields.occupancyStatus as FormState['occupancyStatus'] } : {}),
+      ...(fields.monthlyRent         ? { monthlyRent:         String(fields.monthlyRent) }            : {}),
+      // Applicant
       ...(fields.applicantName       ? { applicantName:       fields.applicantName as string }        : {}),
       ...(fields.applicantPAN        ? { applicantPAN:        fields.applicantPAN as string }         : {}),
       ...(fields.applicantPhone      ? { applicantPhone:      fields.applicantPhone as string }       : {}),
-      ...(fields.applicantEmail      ? { applicantEmail:      fields.applicantEmail as string }       : {}),
-      ...(fields.ownershipType       ? { ownershipType:       fields.ownershipType as 'freehold' | 'leasehold' } : {}),
-      ...(fields.occupancyStatus     ? { occupancyStatus:     fields.occupancyStatus as 'self_occupied' | 'rented' | 'vacant' } : {}),
-      ...(fields.monthlyRent         ? { monthlyRent:         String(fields.monthlyRent) }            : {}),
     }));
 
     const conf: Record<string, 'high' | 'medium' | 'low'> = {};
@@ -780,6 +799,10 @@ export default function PropertyForm() {
                       <div>
                         <label className={lbl}>Contact Phone *</label>
                         <input type="tel" className={iCls('applicantPhone')} value={form.applicantPhone} onChange={e => setForm(f => ({ ...f, applicantPhone: e.target.value }))} placeholder="9876543210" />
+                      </div>
+                      <div>
+                        <label className={lbl}>PAN Number</label>
+                        <input type="text" className={iCls('applicantPAN')} value={form.applicantPAN} onChange={e => setForm(f => ({ ...f, applicantPAN: e.target.value.toUpperCase() }))} placeholder="e.g. ABCDE1234F" maxLength={10} />
                       </div>
                     </div>
                   </Sec>

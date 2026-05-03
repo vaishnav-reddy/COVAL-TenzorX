@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { Upload, FileText, Loader2, AlertCircle } from 'lucide-react';
 
-const OCR_API = import.meta.env.VITE_OCR_API_URL || 'http://localhost:8001';
+const OCR_API = import.meta.env.VITE_OCR_API_URL || '/ocr-api';
 
 const STATES = [
   'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',

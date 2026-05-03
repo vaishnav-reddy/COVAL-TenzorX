@@ -54,6 +54,24 @@ const valuationSchema = new mongoose.Schema(
 
     processingTime: { type: Number }, // ms
     status: { type: String, enum: ['processing', 'completed', 'failed'], default: 'completed' },
+
+    // Market Data Snapshot (saved for dashboard display)
+    marketData: { type: Object },
+    marketActivityProxies: { type: Object },
+    compositeLocationScore: { type: Number },
+
+    // Credit & LTV
+    creditScoring: { type: Object },
+    adjustedLTV: { type: Number, default: 0.75 },
+    creditRiskAdjustment: { type: Number },
+    loanRecommendations: { type: Array },
+
+    // Additional engine outputs
+    propertyAge: { type: Number },
+    declaredVsMarketDeviation: { type: Number },
+    overCircleRatePercent: { type: Number },
+    overPricedFlag: { type: Boolean },
+    liquidityBreakdown: { type: Object },
   },
   { timestamps: true }
 );

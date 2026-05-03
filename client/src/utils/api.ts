@@ -5,6 +5,15 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+// Attach JWT token from localStorage to every request
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('coval_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 export const createValuation = async (data: unknown) => {
   const res = await api.post('/valuations/create', data);
   return res.data;

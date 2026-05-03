@@ -4,7 +4,7 @@ const propertySchema = new mongoose.Schema(
   {
     // Applicant Information (NEW)
     applicantName: { type: String, required: true },
-    applicantEmail: { type: String, required: true },
+    applicantEmail: { type: String },
     applicantPhone: { type: String, required: true },
     applicantPAN: { type: String },
     

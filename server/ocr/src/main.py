@@ -2,6 +2,10 @@
 main.py
 FastAPI server for Land Record OCR extraction.
 Endpoints: /ocr/upload, /ocr/batch, /ocr/health, /ocr/supported-documents, /demo
+
+Processing strategy:
+  1. Text-based PDF  → PyMuPDF direct text extraction (fast, accurate, no OCR needed)
+  2. Scanned PDF / Image → PaddleOCR PP-OCRv5 + EasyOCR fallback
 """
 
 import hashlib
@@ -11,6 +15,7 @@ import tempfile
 import time
 from typing import Any, Dict, List, Optional
 
+import fitz  # PyMuPDF — already installed via pdf_processor
 import uvicorn
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -89,6 +94,46 @@ def _save_temp(data: bytes, suffix: str) -> str:
     return path
 
 
+# ---------------------------------------------------------------------------
+# Text-PDF fast path — uses PyMuPDF direct text extraction
+# ---------------------------------------------------------------------------
+
+# Minimum characters per page to consider a PDF "text-based"
+_TEXT_PDF_THRESHOLD = 100
+
+
+def _extract_text_from_pdf(pdf_path: str) -> tuple[str, int]:
+    """
+    Extract embedded text from a PDF using PyMuPDF.
+    Returns (combined_text, page_count).
+    Works for any digitally-created PDF (Word exports, reports, certificates).
+    """
+    doc = fitz.open(pdf_path)
+    pages_text = []
+    for page in doc:
+        pages_text.append(page.get_text("text"))
+    doc.close()
+    return "\n\n".join(pages_text), len(pages_text)
+
+
+def _is_text_pdf(pdf_path: str) -> bool:
+    """
+    Returns True if the PDF has enough embedded text to skip OCR.
+    Scanned PDFs have near-zero text; digital PDFs have hundreds of chars per page.
+    """
+    try:
+        doc = fitz.open(pdf_path)
+        total_chars = sum(len(page.get_text("text").strip()) for page in doc)
+        page_count = doc.page_count
+        doc.close()
+        avg_chars = total_chars / max(page_count, 1)
+        logger.info(f"PDF text check: {total_chars} chars across {page_count} pages (avg {avg_chars:.0f}/page)")
+        return avg_chars >= _TEXT_PDF_THRESHOLD
+    except Exception as e:
+        logger.warning(f"Text PDF check failed: {e}")
+        return False
+
+
 async def _process_single_file(file: UploadFile) -> Dict[str, Any]:
     data = await file.read()
     _validate_file(file, data)
@@ -107,44 +152,49 @@ async def _process_single_file(file: UploadFile) -> Dict[str, Any]:
     try:
         global_start = time.time()
         warnings: List[str] = []
-
-        stage_start = time.time()
-        logger.info(f"[Stage 1] Converting '{file.filename}' to images...")
-        try:
-            image_paths = processor.process(tmp_path)
-        except ValueError as e:
-            raise HTTPException(status_code=422, detail=f"File processing error: {e}")
-
-        pages_processed = len(image_paths)
-        logger.info(f"[Stage 1] Done — {pages_processed} page(s) in {time.time()-stage_start:.2f}s")
-
-        stage_start = time.time()
-        logger.info("[Stage 2] Running PaddleOCR PP-OCRv5...")
-        engine = get_ocr_engine()
         extractor = get_field_extractor()
 
-        all_raw_text = []
-        all_tables = []
-        all_confidence = []
+        combined_text = ""
+        all_tables: List = []
+        all_confidence: List = []
+        pages_processed = 1
 
-        for img_path in image_paths:
+        # ── Strategy selection ────────────────────────────────────────────
+        if ext == ".pdf" and _is_text_pdf(tmp_path):
+            # Fast path: digital/text-based PDF — direct PyMuPDF extraction
+            logger.info(f"[Fast path] Text-based PDF detected — using PyMuPDF direct extraction")
+            combined_text, pages_processed = _extract_text_from_pdf(tmp_path)
+            logger.info(f"[Fast path] Extracted {len(combined_text)} chars from {pages_processed} pages in "
+                        f"{time.time()-global_start:.2f}s")
+        else:
+            # Slow path: scanned PDF or image — run PaddleOCR
+            logger.info(f"[OCR path] Scanned/image document — running PaddleOCR PP-OCRv5")
             try:
-                ocr_result = engine.process_image(img_path)
-                all_raw_text.append(ocr_result.get("raw_text", ""))
-                all_tables.extend(ocr_result.get("tables", []))
-                all_confidence.extend(ocr_result.get("confidence_scores", []))
-            except Exception as e:
-                logger.warning(f"OCR failed for page {img_path}: {e}")
-                warnings.append(f"OCR failed for one page: {str(e)}")
+                image_paths = processor.process(tmp_path)
+            except ValueError as e:
+                raise HTTPException(status_code=422, detail=f"File processing error: {e}")
 
-        combined_text = "\n\n".join(all_raw_text)
-        logger.info(f"[Stage 2] Done in {time.time()-stage_start:.2f}s — {len(all_tables)} table(s) found")
+            pages_processed = len(image_paths)
+            engine = get_ocr_engine()
+
+            for img_path in image_paths:
+                try:
+                    ocr_result = engine.process_image(img_path)
+                    all_raw_text = ocr_result.get("raw_text", "")
+                    all_tables.extend(ocr_result.get("tables", []))
+                    all_confidence.extend(ocr_result.get("confidence_scores", []))
+                    combined_text += "\n\n" + all_raw_text
+                except Exception as e:
+                    logger.warning(f"OCR failed for page {img_path}: {e}")
+                    warnings.append(f"OCR failed for one page: {str(e)}")
+
+            combined_text = combined_text.strip()
+            logger.info(f"[OCR path] Done — {len(all_tables)} table(s), {len(combined_text)} chars")
 
         if not combined_text.strip():
             warnings.append("No text extracted — document may be blank or heavily degraded.")
 
-        stage_start = time.time()
-        logger.info("[Stage 3] Extracting land record fields...")
+        # ── Field extraction ──────────────────────────────────────────────
         merged_ocr = {
             "raw_text": combined_text,
             "tables": all_tables,
@@ -153,12 +203,10 @@ async def _process_single_file(file: UploadFile) -> Dict[str, Any]:
         }
         extracted = extractor.extract_all_fields(merged_ocr)
         doc_type = extractor.detect_document_type(combined_text)
-        logger.info(f"[Stage 3] Done in {time.time()-stage_start:.2f}s — doc type: {doc_type}")
-
-        stage_start = time.time()
-        logger.info("[Stage 4] Calculating confidence score...")
         confidence_score = extractor.calculate_confidence_score(extracted)
-        logger.info(f"[Stage 4] Confidence: {confidence_score}/100 in {time.time()-stage_start:.2f}s")
+
+        logger.info(f"Doc type: {doc_type} | Confidence: {confidence_score}/100 | "
+                    f"Fields: {len(extracted)} | Time: {time.time()-global_start:.2f}s")
 
         if confidence_score < 50:
             warnings.append("Low confidence score — consider uploading a higher-resolution scan.")
@@ -167,9 +215,9 @@ async def _process_single_file(file: UploadFile) -> Dict[str, Any]:
 
         location = {
             "district": extracted.get("district"),
-            "tehsil": extracted.get("tehsil"),
-            "village": extracted.get("village"),
-            "state": extracted.get("state"),
+            "tehsil":   extracted.get("tehsil"),
+            "village":  extracted.get("village"),
+            "state":    extracted.get("state"),
         }
 
         response = {
@@ -179,17 +227,18 @@ async def _process_single_file(file: UploadFile) -> Dict[str, Any]:
             "processing_time_ms": processing_time_ms,
             "pages_processed": pages_processed,
             "extracted_fields": {
-                "survey_no": extracted.get("survey_no"),
-                "owner_name": extracted.get("owner_name"),
-                "co_owner": extracted.get("co_owner_name"),
-                "land_area": extracted.get("land_area"),
-                "khasra_no": extracted.get("khasra_no"),
-                "khata_no": extracted.get("khata_no"),
-                "land_type": extracted.get("land_type"),
-                "land_use": extracted.get("land_use"),
-                "mutation_no": extracted.get("mutation_no"),
+                "survey_no":         extracted.get("survey_no"),
+                "owner_name":        extracted.get("owner_name"),
+                "co_owner":          extracted.get("co_owner_name"),
+                "land_area":         extracted.get("land_area"),
+                "khasra_no":         extracted.get("khasra_no"),
+                "khata_no":          extracted.get("khata_no"),
+                "land_type":         extracted.get("land_type"),
+                "land_use":          extracted.get("land_use"),
+                "mutation_no":       extracted.get("mutation_no"),
                 "registration_date": extracted.get("registration_date"),
-                "location": location,
+                "location":          location,
+                "property_fields":   extracted.get("property_fields"),
             },
             "raw_ocr_text": combined_text,
             "tables_found": len(all_tables),

@@ -30,6 +30,8 @@ interface MergedResult {
   extractionRate: number;
   documentType: string;
   isLandRecord: boolean;
+  aiPowered?: boolean;
+  ocrEngine?: string;
   perFile: PerFile[];
   totalFiles: number;
   successfulFiles: number;
@@ -76,15 +78,24 @@ const CONF_DOT: Record<Confidence, string> = {
 
 const FIELD_LABELS: Record<string, string> = {
   propertyType:        'Property Type',
+  propertySubType:     'Sub-type',
+  purpose:             'Loan Purpose',
+  loanAmountRequired:  'Loan Amount',
+  declaredValue:       'Declared Value',
   city:                'City',
   locality:            'Locality',
   pincode:             'Pincode',
   area:                'Area (sqft)',
+  areaType:            'Area Type',
   yearOfConstruction:  'Year Built',
   floorNumber:         'Floor No.',
   totalFloors:         'Total Floors',
   constructionQuality: 'Quality',
-  declaredValue:       'Declared Value',
+  amenities:           'Amenities',
+  ownershipType:       'Ownership',
+  titleClarity:        'Title Status',
+  occupancyStatus:     'Occupancy',
+  monthlyRent:         'Monthly Rent',
   applicantName:       'Applicant Name',
   applicantPAN:        'PAN',
   applicantPhone:      'Phone',
@@ -103,7 +114,9 @@ const LAND_META = new Set([
 
 const LAND_FORM = new Set([
   'propertyType', 'city', 'locality', 'pincode', 'area',
-  'declaredValue', 'applicantName', 'applicantPAN', 'applicantPhone', 'applicantEmail',
+  'yearOfConstruction', 'floorNumber', 'totalFloors', 'constructionQuality',
+  'declaredValue', 'loanAmountRequired', 'applicantName', 'applicantPAN',
+  'applicantPhone', 'applicantEmail', 'ownershipType', 'occupancyStatus', 'monthlyRent',
 ]);
 
 const MAX_FILES = 5;
@@ -151,17 +164,21 @@ export function DocumentUpload({ onExtracted }: Props) {
       const res = await extractDocuments(files);
       if (res.success) {
         setResult(res.data);
-        toast.success(
-          `✅ ${res.data.extractedCount} fields from ${res.data.successfulFiles}/${res.data.totalFiles} docs`
-        );
+        if (res.data.successfulFiles === 0) {
+          toast.error('No fields could be extracted. Check document quality.');
+        } else {
+          toast.success(
+            `✅ ${res.data.extractedCount} fields from ${res.data.successfulFiles}/${res.data.totalFiles} docs`
+          );
+        }
       } else {
         toast.error(res.message || 'Extraction failed');
       }
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-        || 'Extraction failed';
-      toast.error(msg);
+      const errObj = err as { response?: { data?: { message?: string; hint?: string } }; message?: string };
+      const msg = errObj?.response?.data?.message || errObj?.message || 'Extraction failed';
+      const hint = errObj?.response?.data?.hint;
+      toast.error(hint ? `${msg} — ${hint}` : msg);
     } finally {
       setLoading(false);
     }
@@ -287,7 +304,7 @@ export function DocumentUpload({ onExtracted }: Props) {
             <div className="flex items-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin text-[#111]" />
               <span className="text-xs font-semibold text-gray-700">
-                Running OCR on {files.length} document{files.length > 1 ? 's' : ''}…
+                Extracting with Gemini AI — {files.length} document{files.length > 1 ? 's' : ''}…
               </span>
             </div>
             {files.map((f, i) => (
@@ -327,6 +344,11 @@ export function DocumentUpload({ onExtracted }: Props) {
                 <span className="text-xs font-semibold text-gray-700">
                   {result.extractedCount} fields merged from {result.successfulFiles}/{result.totalFiles} docs
                 </span>
+                {result.aiPowered && (
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 border border-violet-200 flex items-center gap-1">
+                    <Sparkles className="w-2.5 h-2.5" /> Gemini AI
+                  </span>
+                )}
                 {result.isLandRecord && (
                   <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
                     Land Record
@@ -387,8 +409,10 @@ export function DocumentUpload({ onExtracted }: Props) {
                 const conf   = result.confidenceMap[key];
                 const label  = FIELD_LABELS[key] || key;
                 const src    = result.fieldSources[key];
-                const disp   = key === 'declaredValue'
+                const disp   = key === 'declaredValue' || key === 'loanAmountRequired'
                   ? `₹${Number(value).toLocaleString('en-IN')}`
+                  : Array.isArray(value)
+                  ? (value as string[]).join(', ')
                   : String(value);
 
                 return (
