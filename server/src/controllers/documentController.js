@@ -2,7 +2,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const { extract } = require('../services/documentExtractor');
 
 // Confidence rank — higher = more trustworthy
 const CONFIDENCE_RANK = { high: 3, medium: 2, low: 1 };

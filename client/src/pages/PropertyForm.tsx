@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMutation } from '@tanstack/react-query';
 import {
-  MapPin, ChevronRight, Building2, Ruler, Loader2, ChevronLeft,
+  MapPin, ChevronRight, ArrowRight, Building2, Ruler, Loader2, ChevronLeft,
   DollarSign, Target, User, Sparkles, Home, Store, Factory,
   TreePine, TrendingUp, TrendingDown, Minus, CheckCircle2,
 } from 'lucide-react';
@@ -13,18 +13,36 @@ import { createValuation } from '../utils/api';
 import { useValuation } from '../context/ValuationContext';
 import { EngineLoader } from '../components/ui/EngineLoader';
 import { DocumentUpload } from '../components/ui/DocumentUpload';
+import CibilScorePopup from '../components/ui/CibilScorePopup';
 
 /* ─── constants ─── */
 const AMENITIES = [
   'Parking', 'Lift', 'Security', 'Gym', 'Swimming Pool',
   'Power Backup', 'Garden', 'Club House', 'CCTV', 'Intercom',
+  'Fire Safety', 'Water Treatment', 'Solar Panels', 'Rain Water Harvesting',
 ];
 
 const SUB_TYPES: Record<string, string[]> = {
-  residential: ['Apartment', 'Villa', 'Row House', 'Bungalow', 'Studio', 'Penthouse'],
-  commercial:  ['Shop', 'Office', 'Showroom', 'Mall Unit'],
-  industrial:  ['Warehouse', 'Factory', 'Godown', 'Shed'],
-  land:        ['Residential Plot', 'Commercial Plot', 'Agricultural', 'NA Plot'],
+  residential: ['Apartment', 'Villa', 'Row House', 'Bungalow', 'Studio', 'Penthouse', 'Builder Floor'],
+  commercial:  ['Shop', 'Office', 'Showroom', 'Mall Unit', 'Business Center'],
+  industrial:  ['Warehouse', 'Factory', 'Godown', 'Shed', 'Industrial Plot'],
+  
+};
+
+// Property configuration requirements based on problem statement
+const PROPERTY_CONFIG_REQUIREMENTS = {
+  apartment: {
+    requiredProximity: ['Police Station', 'Fire Station', 'Hospital', 'Electricity Substation', 'Railway Boundary'],
+    maxDistanceKm: { police: 2, fire: 3, hospital: 5, electricity: 3, railway: 1 },
+  },
+  villa: {
+    requiredProximity: ['Schools', 'Hospitals', 'Highways'],
+    maxDistanceKm: { school: 3, hospital: 5, highway: 2 },
+  },
+  commercial: {
+    requiredProximity: ['Commercial Hubs', 'Metro Station', 'Highways'],
+    maxDistanceKm: { commercial: 2, metro: 1, highway: 2 },
+  },
 };
 
 const DEFAULT_FORM_PCT = 40;
@@ -33,6 +51,7 @@ const MAX_FORM_PCT = 60;
 
 /* ─── form state type ─── */
 interface FormState {
+  // Core Property Information (Problem Statement Priority)
   propertyType: string;
   propertySubType: string;
   location: string;
@@ -44,21 +63,42 @@ interface FormState {
   totalFloors: string;
   constructionQuality: string;
   amenities: string[];
+  
+  // Legal & Ownership Attributes (Problem Statement Priority)
   ownershipType: 'freehold' | 'leasehold';
   titleClarity: 'clear' | 'disputed' | 'litigation';
+  
+  // Income & Usage Signals (Problem Statement Priority)
   occupancyStatus: 'self_occupied' | 'rented' | 'vacant';
   monthlyRent: string;
+  
+  // Financial & Loan Information
   declaredValue: string;
-  purpose: string;
+  purpose: 'lap' | 'mortgage' | 'working_capital';
   marketScenario: 'normal' | 'growth' | 'crash';
+  
+  // Applicant Information
   applicantName: string;
   applicantEmail: string;
   applicantPhone: string;
   applicantPAN: string;
+  
+  // Credit Information (New - CIBIL Integration)
+  cibilScore?: string;
+  existingLoans?: string;
+  existingEMIs?: string;
+  
+  // Property Documents (Enhanced)
+  hasMunicipalApproval: boolean;
+  hasEncumbranceCertificate: boolean;
+  hasSaleDeed: boolean;
+  propertyTaxPaid: boolean;
+  rentalYield: number;
+  loanAmountRequired: string;
 }
 
 const INITIAL_FORM: FormState = {
-  propertyType: 'residential',
+  propertyType: '',
   propertySubType: '',
   location: '',
   pincode: '',
@@ -80,17 +120,23 @@ const INITIAL_FORM: FormState = {
   applicantEmail: '',
   applicantPhone: '',
   applicantPAN: '',
+  hasMunicipalApproval: true,
+  hasEncumbranceCertificate: false,
+  hasSaleDeed: true,
+  propertyTaxPaid: true,
+  rentalYield: 0,
+  loanAmountRequired: '',
 };
 
 /* ─── small reusable primitives ─── */
-const inp = 'w-full bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-gray-800 text-sm focus:outline-none focus:border-gray-800 focus:ring-1 focus:ring-gray-100 transition-colors placeholder:text-gray-400';
-const lbl = 'block text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5';
+const inp = 'w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-gray-900 text-[14px] font-medium focus:outline-none focus:border-[#1A1A1A] focus:ring-2 focus:ring-[#1A1A1A]/10 transition-all placeholder:text-gray-400 shadow-sm';
+const lbl = 'block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5';
 
 function confBorder(c?: 'high' | 'medium' | 'low') {
   if (!c) return '';
-  if (c === 'high')   return 'border-emerald-300 bg-emerald-50/40';
-  if (c === 'medium') return 'border-amber-300 bg-amber-50/40';
-  return 'border-red-300 bg-red-50/40';
+  if (c === 'high')   return 'border-emerald-200 bg-emerald-50/20';
+  if (c === 'medium') return 'border-amber-200 bg-amber-50/20';
+  return 'border-red-200 bg-red-50/20';
 }
 
 /* ─── Pill toggle (2 or 3 options) ─── */
@@ -98,14 +144,14 @@ function PillToggle<T extends string>({
   options, value, onChange,
 }: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void }) {
   return (
-    <div className="flex rounded-lg border border-gray-200 overflow-hidden bg-gray-50 p-0.5 gap-0.5">
+    <div className="flex rounded-xl border border-gray-100 overflow-hidden bg-gray-50/50 p-1 gap-1">
       {options.map(o => (
         <button
           key={o.value} type="button"
           onClick={() => onChange(o.value)}
-          className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all ${
+          className={`flex-1 py-2 text-[11px] font-bold rounded-lg transition-all ${
             value === o.value
-              ? 'bg-white text-gray-900 shadow-sm'
+              ? 'bg-white text-gray-900 shadow-sm ring-1 ring-black/5'
               : 'text-gray-400 hover:text-gray-600'
           }`}
         >{o.label}</button>
@@ -115,11 +161,18 @@ function PillToggle<T extends string>({
 }
 
 /* ─── Section wrapper ─── */
-function Sec({ title, children }: { title: string; children: React.ReactNode }) {
+function Sec({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-3">
-      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{title}</p>
-      {children}
+    <div className="group bg-white rounded-2xl border border-gray-100 p-6 space-y-4 transition-all hover:border-gray-200 hover:shadow-lg">
+      <div className="flex items-center gap-3 border-b border-gray-50 pb-3">
+        <div className="p-2 rounded-xl bg-gray-50 text-gray-900 group-hover:bg-[#1A1A1A] group-hover:text-white transition-colors">
+          {icon}
+        </div>
+        <p className="text-[11px] font-bold text-gray-900 uppercase tracking-widest">{title}</p>
+      </div>
+      <div className="space-y-3">
+        {children}
+      </div>
     </div>
   );
 }
@@ -142,6 +195,14 @@ export default function PropertyForm() {
   const [searchingLoc, setSearchingLoc] = useState(false);
   const [mapTarget, setMapTarget] = useState('');
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // NEW: CIBIL Score Popup State
+  const [showCibilPopup, setShowCibilPopup] = useState(false);
+  const [cibilData, setCibilData] = useState({
+    cibilScore: '',
+    existingLoans: '',
+    existingEMIs: ''
+  });
 
   const MAPBOX_TOKEN = 'pk.eyJ1IjoiZ2FuZXNoLWFpIiwiYSI6ImNtb25manBraTA0djIycHF5ZmNoaHc1d3oifQ.9t0phnsdsFubQao7PN-hHQ';
 
@@ -203,6 +264,59 @@ export default function PropertyForm() {
     },
   });
 
+  /* NEW: Handle CIBIL score submission */
+  const handleCibilSubmit = (creditData: typeof cibilData) => {
+    setCibilData(creditData);
+    setShowCibilPopup(false);
+    
+    if (creditData.cibilScore) {
+      toast.success(`CIBIL score ${creditData.cibilScore} captured`);
+    }
+    
+    // Auto-submit after CIBIL data is captured
+    setTimeout(() => {
+      submitValuation();
+    }, 500);
+  };
+
+  /* Enhanced submit with CIBIL popup */
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Validate required fields
+    const requiredFields = ['location', 'area', 'loanAmountRequired', 'applicantName', 'applicantEmail', 'applicantPhone'];
+    const missingFields = requiredFields.filter(field => !form[field as keyof FormState]);
+    
+    if (missingFields.length > 0) {
+      toast.error('Please fill all required fields');
+      return;
+    }
+
+    // Show CIBIL popup before submission
+    setShowCibilPopup(true);
+  };
+
+  /* Final submission after CIBIL popup */
+  const submitValuation = useCallback(() => {
+    // Parse city/locality from location string
+    const parts = form.location.split(',').map(s => s.trim());
+    const locality = parts[0] || form.location;
+    const city     = parts[parts.length - 2] || parts[parts.length - 1] || '';
+
+    mutation.mutate({
+      ...form,
+      ...cibilData, // Include CIBIL data
+      city,
+      locality,
+      area:          parseFloat(form.area),
+      declaredValue: parseFloat(form.declaredValue),
+      monthlyRent:   form.monthlyRent ? parseFloat(form.monthlyRent) : undefined,
+      floorNumber:   form.floorNumber ? parseInt(form.floorNumber) : 0,
+      totalFloors:   form.totalFloors ? parseInt(form.totalFloors) : 1,
+      yearOfConstruction: form.yearOfConstruction ? parseInt(form.yearOfConstruction) : undefined,
+    });
+  }, [form, cibilData, mutation]);
+
   /* amenity toggle */
   const toggleAmenity = (a: string) =>
     setForm(f => ({ ...f, amenities: f.amenities.includes(a) ? f.amenities.filter(x => x !== a) : [...f.amenities, a] }));
@@ -244,31 +358,6 @@ export default function PropertyForm() {
     setFieldConf(conf);
 
     if (locationStr) setMapTarget(locationStr);
-  }
-
-  /* submit */
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.location || !form.area || !form.declaredValue || !form.applicantName || !form.applicantEmail || !form.applicantPhone) {
-      toast.error('Please fill all required fields');
-      return;
-    }
-    // Parse city/locality from location string
-    const parts = form.location.split(',').map(s => s.trim());
-    const locality = parts[0] || form.location;
-    const city     = parts[parts.length - 2] || parts[parts.length - 1] || '';
-
-    mutation.mutate({
-      ...form,
-      city,
-      locality,
-      area:          parseFloat(form.area),
-      declaredValue: parseFloat(form.declaredValue),
-      monthlyRent:   form.monthlyRent ? parseFloat(form.monthlyRent) : undefined,
-      floorNumber:   form.floorNumber ? parseInt(form.floorNumber) : 0,
-      totalFloors:   form.totalFloors ? parseInt(form.totalFloors) : 1,
-      yearOfConstruction: form.yearOfConstruction ? parseInt(form.yearOfConstruction) : undefined,
-    });
   }
 
   /* helpers */
@@ -321,42 +410,39 @@ export default function PropertyForm() {
               onClick={() => setPanelOpen(false)}
               className="absolute -right-4 top-1/2 -translate-y-1/2 z-30 w-4 h-10 bg-white border border-gray-200 rounded-r-lg flex items-center justify-center text-gray-400 hover:text-gray-800 shadow-sm transition-colors"
             >
-              <ChevronLeft className="w-3 h-3" />
+              <ChevronRight className="w-3 h-3" />
             </button>
 
             {/* header */}
-            <div className="px-5 pl-16 py-4 border-b border-gray-100 shrink-0">
-              <h1 className="text-sm font-bold text-gray-900 tracking-tight">Collateral Valuation</h1>
-              <p className="text-[11px] text-gray-400 mt-0.5">AI-powered property assessment for lending</p>
+            <div className="px-8 pl-20 py-6 border-b border-gray-50 shrink-0">
+              <h1 className="text-lg font-bold text-gray-900 tracking-tight leading-none">Collateral Valuation</h1>
+              <p className="text-[11px] text-gray-400 mt-1.5 font-medium">AI powered property assessment for lending</p>
             </div>
 
             {/* scrollable body */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto bg-gray-50/30">
               <form id="vform" onSubmit={handleSubmit}>
 
                 {/* ── AUTO-FILL ── */}
-                <div className="px-5 pt-5 pb-4 border-b border-gray-100 bg-gradient-to-b from-gray-50/60 to-white">
-                  <div className="flex items-center justify-center gap-2 mb-3">
-                    <div className="h-px flex-1 bg-gray-100" />
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
-                      <Sparkles className="w-3 h-3" /> Auto-fill from Documents
-                    </span>
-                    <div className="h-px flex-1 bg-gray-100" />
-                  </div>
-                  <DocumentUpload onExtracted={handleExtracted} />
-                  {hasConf && (
-                    <div className="mt-2.5 flex items-center justify-center gap-4 text-[10px] text-gray-400">
-                      <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" /> Verified</span>
-                      <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400  inline-block" /> Review</span>
-                      <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-400    inline-block" /> Uncertain</span>
+                <div className="px-8 pl-20 py-6 border-b border-gray-100 bg-white">
+                  <div className="flex items-start gap-4">
+                    <div className="flex-1">
+                      <DocumentUpload onExtracted={handleExtracted} />
                     </div>
-                  )}
+                    {hasConf && (
+                      <div className="flex flex-col gap-2 text-[9px] font-bold uppercase tracking-wider text-gray-400">
+                        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Verified</span>
+                        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Review</span>
+                        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-red-400" /> Uncertain</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                <div className="px-5 py-5 space-y-7">
+                <div className="px-8 pl-20 py-6 space-y-6">
 
                   {/* ══ 1. PROPERTY ══ */}
-                  <Sec title="Property">
+                  <Sec icon={<Building2 className="w-4 h-4" />} title="Property Classification">
                     {/* Type */}
                     <div>
                       <label className={lbl}>Type *</label>
@@ -365,7 +451,7 @@ export default function PropertyForm() {
                           { v: 'residential', icon: <Home className="w-3.5 h-3.5" />,    label: 'Residential' },
                           { v: 'commercial',  icon: <Store className="w-3.5 h-3.5" />,   label: 'Commercial' },
                           { v: 'industrial',  icon: <Factory className="w-3.5 h-3.5" />, label: 'Industrial' },
-                          { v: 'land',        icon: <TreePine className="w-3.5 h-3.5" />, label: 'Land' },
+                          
                         ].map(t => (
                           <button
                             key={t.v} type="button"
@@ -401,19 +487,34 @@ export default function PropertyForm() {
                       </div>
                     </div>
 
-                    {/* Purpose */}
-                    <div>
-                      <label className={lbl}>Loan Purpose *</label>
-                      <select className={inp} value={form.purpose} onChange={e => setForm(f => ({ ...f, purpose: e.target.value }))}>
-                        <option value="lap">Loan Against Property (LAP)</option>
-                        <option value="mortgage">Mortgage / Home Loan</option>
-                        <option value="working_capital">Working Capital</option>
-                      </select>
+                    {/* Loan Purpose and Amount */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      <div>
+                        <label className={lbl}>Loan Purpose *</label>
+                        <select className={inp} value={form.purpose} onChange={e => setForm(f => ({ ...f, purpose: e.target.value as FormState['purpose'] }))}>
+                          <option value="lap">Loan Against Property (LAP)</option>
+                          <option value="mortgage">Mortgage / Home Loan</option>
+                          <option value="working_capital">Working Capital</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className={lbl}>Loan Amount Required (₹) *</label>
+                        <input
+                          type="number"
+                          className={iCls('loanAmountRequired')}
+                          value={form.loanAmountRequired}
+                          onChange={e => setForm(f => ({ ...f, loanAmountRequired: e.target.value }))}
+                          placeholder="e.g. 5000000"
+                        />
+                        {form.loanAmountRequired && (
+                          <p className="text-xs text-gray-400 mt-1">{fmtValue(form.loanAmountRequired)}</p>
+                        )}
+                      </div>
                     </div>
                   </Sec>
 
                   {/* ══ 2. LOCATION ══ */}
-                  <Sec title="Location">
+                  <Sec icon={<MapPin className="w-4 h-4" />} title="Location Intelligence">
                     <div className="relative">
                       <label className={lbl}>Full Address *</label>
                       <div className="relative">
@@ -447,14 +548,10 @@ export default function PropertyForm() {
                         </div>
                       )}
                     </div>
-                    <div>
-                      <label className={lbl}>Pincode</label>
-                      <input className={iCls('pincode')} value={form.pincode} onChange={e => setForm(f => ({ ...f, pincode: e.target.value }))} placeholder="e.g. 400001" />
-                    </div>
                   </Sec>
 
                   {/* ══ 3. PROPERTY DETAILS ══ */}
-                  <Sec title="Property Details">
+                  <Sec icon={<Ruler className="w-4 h-4" />} title="Structural Metrics">
                     {/* Area */}
                     <div>
                       <label className={lbl}>Area *</label>
@@ -536,143 +633,153 @@ export default function PropertyForm() {
                     </div>
                   </Sec>
 
-                  {/* ══ 4. LEGAL & OWNERSHIP ══ */}
-                  <Sec title="Legal & Ownership">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className={lbl}>Ownership Type</label>
-                        <PillToggle
-                          options={[{ value: 'freehold', label: 'Freehold' }, { value: 'leasehold', label: 'Leasehold' }]}
-                          value={form.ownershipType}
-                          onChange={v => setForm(f => ({ ...f, ownershipType: v }))}
-                        />
+                  {/* ══ 6. LEGAL & DOCUMENTS ══ */}
+                  <Sec icon={<CheckCircle2 className="w-4 h-4" />} title="Legal Compliance">
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className={lbl}>Ownership Type</label>
+                          <PillToggle
+                            options={[{ value: 'freehold', label: 'Freehold' }, { value: 'leasehold', label: 'Leasehold' }]}
+                            value={form.ownershipType}
+                            onChange={v => setForm(f => ({ ...f, ownershipType: v }))}
+                          />
+                        </div>
+                        <div>
+                          <label className={lbl}>Title Status</label>
+                          <PillToggle
+                            options={[
+                              { value: 'clear', label: 'Clear' },
+                              { value: 'disputed', label: 'Disputed' },
+                              { value: 'litigation', label: 'Litigation' },
+                            ]}
+                            value={form.titleClarity}
+                            onChange={v => setForm(f => ({ ...f, titleClarity: v }))}
+                          />
+                        </div>
                       </div>
+                      
+                      {/* Document Checklist */}
                       <div>
-                        <label className={lbl}>Title Status</label>
-                        <PillToggle
-                          options={[
-                            { value: 'clear', label: 'Clear' },
-                            { value: 'disputed', label: 'Disputed' },
-                            { value: 'litigation', label: 'Litigation' },
-                          ]}
-                          value={form.titleClarity}
-                          onChange={v => setForm(f => ({ ...f, titleClarity: v }))}
-                        />
+                        <label className={lbl}>Property Documents</label>
+                        <div className="space-y-2">
+                          {[
+                            { key: 'hasMunicipalApproval', label: 'Municipal Approval', required: true },
+                            { key: 'hasEncumbranceCertificate', label: 'Encumbrance Certificate', required: false },
+                            { key: 'hasSaleDeed', label: 'Sale Deed', required: true },
+                            { key: 'propertyTaxPaid', label: 'Property Tax Paid', required: true },
+                          ].map(doc => (
+                            <label key={doc.key} className="flex items-center gap-2 text-xs">
+                              <input
+                                type="checkbox"
+                                checked={form[doc.key as keyof FormState] as boolean}
+                                onChange={e => setForm(f => ({ ...f, [doc.key]: e.target.checked }))}
+                                className="rounded border-gray-300 text-gray-900 focus:ring-gray-500"
+                              />
+                              <span className={doc.required ? 'font-medium' : ''}>
+                                {doc.label}
+                                {doc.required && <span className="text-red-500 ml-1">*</span>}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
                       </div>
+                      
+                      {/* Title clarity indicator */}
+                      {form.titleClarity !== 'clear' && (
+                        <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium ${
+                          form.titleClarity === 'litigation' ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
+                        }`}>
+                          <span>{form.titleClarity === 'litigation' ? '⚠️ Litigation will significantly reduce LTV and liquidity score' : '⚠️ Disputed title may affect resale and lending eligibility'}</span>
+                        </div>
+                      )}
                     </div>
-                    {/* title clarity indicator */}
-                    {form.titleClarity !== 'clear' && (
-                      <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium ${
-                        form.titleClarity === 'litigation' ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
-                      }`}>
-                        <span>{form.titleClarity === 'litigation' ? '⚠️ Litigation will significantly reduce LTV and liquidity score' : '⚠️ Disputed title may affect resale and lending eligibility'}</span>
-                      </div>
-                    )}
                   </Sec>
 
                   {/* ══ 5. USAGE & INCOME ══ */}
-                  <Sec title="Usage & Income Signals">
-                    <div>
-                      <label className={lbl}>Occupancy Status</label>
-                      <PillToggle
-                        options={[
-                          { value: 'self_occupied', label: 'Self-occupied' },
-                          { value: 'rented',        label: 'Rented' },
-                          { value: 'vacant',        label: 'Vacant' },
-                        ]}
-                        value={form.occupancyStatus}
-                        onChange={v => setForm(f => ({ ...f, occupancyStatus: v }))}
-                      />
-                    </div>
-                    {/* conditional rent field */}
-                    <AnimatePresence>
-                      {form.occupancyStatus === 'rented' && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.2 }}
-                        >
-                          <label className={lbl}>Monthly Rent (₹)</label>
-                          <input
-                            type="number"
-                            className={iCls('monthlyRent')}
-                            value={form.monthlyRent}
-                            onChange={e => setForm(f => ({ ...f, monthlyRent: e.target.value }))}
-                            placeholder="e.g. 45000"
+                  <Sec icon={<TrendingUp className="w-4 h-4" />} title="Yield & Market Signals">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 overflow-visible">
+                      {/* Left Column - Yield Signals */}
+                      <div className="space-y-4 overflow-visible min-h-0">
+                        <div>
+                          <label className={lbl}>Occupancy Status</label>
+                          <PillToggle
+                            options={[
+                              { value: 'self_occupied', label: 'Self-occupied' },
+                              { value: 'rented', label: 'Rented' },
+                              { value: 'vacant', label: 'Vacant' },
+                            ]}
+                            value={form.occupancyStatus}
+                            onChange={v => setForm(f => ({ ...f, occupancyStatus: v }))}
                           />
-                          {form.monthlyRent && (
-                            <p className="text-[10px] text-emerald-600 mt-1 flex items-center gap-1">
-                              <CheckCircle2 className="w-3 h-3" />
-                              Rental yield improves resale certainty and liquidity score
-                            </p>
+                        </div>
+                        {/* conditional rent field */}
+                        <AnimatePresence>
+                          {form.occupancyStatus === 'rented' && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              transition={{ duration: 0.2 }}
+                              className="overflow-visible"
+                            >
+                              <label className={lbl}>Monthly Rent (₹)</label>
+                              <input
+                                type="number"
+                                className={iCls('monthlyRent')}
+                                value={form.monthlyRent}
+                                onChange={e => setForm(f => ({ ...f, monthlyRent: e.target.value }))}
+                                placeholder="e.g. 45000"
+                              />
+                              {form.monthlyRent && (
+                                <div className="mt-2 text-[10px] text-emerald-600 leading-tight break-words">
+                                  <div className="flex items-start gap-1">
+                                    <CheckCircle2 className="w-3 h-3 mt-0.5 shrink-0" />
+                                    <span className="flex-1">Rental yield improves resale certainty and liquidity score</span>
+                                  </div>
+                                </div>
+                              )}
+                            </motion.div>
                           )}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </Sec>
-
-                  {/* ══ 6. FINANCIAL ══ */}
-                  <Sec title="Financial">
-                    <div>
-                      <label className={lbl}>Declared Value (₹) *</label>
-                      <input
-                        type="number"
-                        className={iCls('declaredValue')}
-                        value={form.declaredValue}
-                        onChange={e => setForm(f => ({ ...f, declaredValue: e.target.value }))}
-                        placeholder="e.g. 8500000"
-                      />
-                      {form.declaredValue && (
-                        <p className="text-xs text-gray-400 mt-1">{fmtValue(form.declaredValue)}</p>
-                      )}
-                    </div>
-
-                    {/* Market scenario */}
-                    <div>
-                      <label className={lbl}>Market Scenario (Stress Test)</label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {[
-                          { v: 'normal', l: 'Base Case',    icon: <Minus className="w-3.5 h-3.5" />,       color: 'text-gray-600' },
-                          { v: 'growth', l: 'Growth +10%',  icon: <TrendingUp className="w-3.5 h-3.5" />,  color: 'text-emerald-600' },
-                          { v: 'crash',  l: 'Stress −15%',  icon: <TrendingDown className="w-3.5 h-3.5" />, color: 'text-red-500' },
-                        ].map(s => (
-                          <button key={s.v} type="button"
-                            onClick={() => setForm(f => ({ ...f, marketScenario: s.v as FormState['marketScenario'] }))}
-                            className={`flex flex-col items-center gap-1 py-2.5 rounded-xl border text-[10px] font-semibold transition-all ${
-                              form.marketScenario === s.v
-                                ? 'border-gray-900 bg-gray-50 text-gray-900'
-                                : 'border-gray-200 text-gray-400 hover:border-gray-300'
-                            }`}
-                          >
-                            <span className={form.marketScenario === s.v ? s.color : ''}>{s.icon}</span>
-                            <span>{s.l}</span>
-                          </button>
-                        ))}
+                        </AnimatePresence>
+                      </div>
+                      
+                      {/* Right Column - Market Scenario */}
+                      <div>
+                        <label className={lbl}>Market Scenario (Stress Test)</label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {[
+                            { v: 'normal', l: 'Base Case',    icon: <Minus className="w-3.5 h-3.5" />,       color: 'text-gray-600' },
+                            { v: 'growth', l: 'Growth +10%',  icon: <TrendingUp className="w-3.5 h-3.5" />,  color: 'text-emerald-600' },
+                            { v: 'crash',  l: 'Stress −15%',  icon: <TrendingDown className="w-3.5 h-3.5" />, color: 'text-red-500' },
+                          ].map(s => (
+                            <button key={s.v} type="button"
+                              onClick={() => setForm(f => ({ ...f, marketScenario: s.v as FormState['marketScenario'] }))}
+                              className={`flex flex-col items-center gap-1 py-3 rounded-xl border text-[10px] font-bold transition-all ${
+                                form.marketScenario === s.v
+                                  ? 'border-gray-900 bg-gray-900 text-white shadow-lg shadow-gray-200'
+                                  : 'border-gray-100 bg-gray-50/50 text-gray-400 hover:border-gray-200'
+                              }`}
+                            >
+                              <span className={form.marketScenario === s.v ? '' : s.color}>{s.icon}</span>
+                              <span>{s.l}</span>
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </Sec>
 
-                  {/* ══ 7. APPLICANT ══ */}
-                  <Sec title="Applicant">
-                    <div className="space-y-3">
+                  {/* ══ 6. APPLICANT ══ */}
+                  <Sec icon={<User className="w-4 h-4" />} title="Applicant Contact">
+                    <div className="grid grid-cols-1 gap-4">
                       <div>
-                        <label className={lbl}>Full Name *</label>
+                        <label className={lbl}>Full Legal Name *</label>
                         <input type="text" className={iCls('applicantName')} value={form.applicantName} onChange={e => setForm(f => ({ ...f, applicantName: e.target.value }))} placeholder="e.g. Rahul Sharma" />
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className={lbl}>Email *</label>
-                          <input type="email" className={iCls('applicantEmail')} value={form.applicantEmail} onChange={e => setForm(f => ({ ...f, applicantEmail: e.target.value }))} placeholder="rahul@example.com" />
-                        </div>
-                        <div>
-                          <label className={lbl}>Phone *</label>
-                          <input type="tel" className={iCls('applicantPhone')} value={form.applicantPhone} onChange={e => setForm(f => ({ ...f, applicantPhone: e.target.value }))} placeholder="9876543210" />
-                        </div>
-                      </div>
                       <div>
-                        <label className={lbl}>PAN</label>
-                        <input type="text" className={iCls('applicantPAN')} value={form.applicantPAN} onChange={e => setForm(f => ({ ...f, applicantPAN: e.target.value }))} placeholder="ABCDE1234F" />
+                        <label className={lbl}>Contact Phone *</label>
+                        <input type="tel" className={iCls('applicantPhone')} value={form.applicantPhone} onChange={e => setForm(f => ({ ...f, applicantPhone: e.target.value }))} placeholder="9876543210" />
                       </div>
                     </div>
                   </Sec>
@@ -683,18 +790,18 @@ export default function PropertyForm() {
             </div>
 
             {/* ── PINNED FOOTER ── */}
-            <div className="shrink-0 border-t border-gray-100 bg-white px-5 py-4">
+            <div className="shrink-0 border-t border-gray-100 bg-white px-8 pl-20 py-4">
               <motion.button
-                form="vform" type="submit"
+                form="vform" type="button"
+                onClick={handleSubmit}
                 disabled={mutation.isPending}
-                whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
-                className="w-full py-3.5 bg-gray-900 hover:bg-black text-white font-bold rounded-2xl text-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-all shadow-md"
+                whileHover={{ scale: 1.02, y: -1 }} whileTap={{ scale: 0.98 }}
+                className="w-full px-8 py-4 bg-[#1A1A1A] hover:bg-black text-white text-[15px] font-medium rounded-full flex items-center justify-center gap-2 transition-all shadow-[0_4px_20px_rgba(0,0,0,0.1)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.15)] hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:transform-none"
               >
-                <Target className="w-4 h-4" />
-                Generate Valuation
-                <ChevronRight className="w-4 h-4" />
+                <span>Verify Property</span>
+                <ArrowRight className="w-4 h-4 opacity-80" />
               </motion.button>
-              <p className="text-center text-[10px] text-gray-300 mt-2">COVAL AI Engine · RBI Compliant</p>
+              <p className="text-center text-[13px] text-gray-500 mt-3 font-medium">COVAL AI Engine · Real-time Market Data · RBI Compliant</p>
             </div>
           </motion.div>
         )}
@@ -727,6 +834,18 @@ export default function PropertyForm() {
           }}
         />
       </div>
+      
+      {/* CIBIL Score Popup */}
+      <CibilScorePopup
+        isOpen={showCibilPopup}
+        onClose={() => setShowCibilPopup(false)}
+        onSubmit={(data) => handleCibilSubmit({
+          cibilScore: data.score,
+          existingLoans: data.existingLoans,
+          existingEMIs: data.existingEMIs
+        })}
+        loading={mutation.isPending}
+      />
     </div>
   );
 }

@@ -309,40 +309,42 @@ export function MapView({ onLocationConfirm, searchLocation, onResizeReady }: Ma
       <div className="absolute top-4 left-4 right-16 z-20 flex flex-col gap-2 pointer-events-none">
         <div className="flex gap-2 pointer-events-auto">
           <div className="flex-1 relative">
-            <div className="flex items-center gap-2 bg-white/95 backdrop-blur-md border border-gray-200 rounded-xl px-4 py-3 shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
-              {searching || autoLocating
-                ? <Loader2 className="w-4 h-4 text-[#111] shrink-0 animate-spin" />
-                : <Search className="w-4 h-4 text-gray-400 shrink-0" />
-              }
-              <input
-                type="text"
-                value={manualQuery}
-                onChange={(e) => handleManualSearch(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearchEnter()}
-                placeholder={searchLocation ? `Showing: ${searchLocation}` : 'Search any property location...'}
-                className="flex-1 text-[13px] font-semibold text-gray-900 placeholder:text-gray-400 placeholder:font-medium bg-transparent focus:outline-none min-w-0"
-              />
-              {manualQuery && (
-                <button onClick={() => { setManualQuery(''); setSuggestions([]); }}>
-                  <X className="w-4 h-4 text-gray-400 hover:text-[#111] transition-colors" />
-                </button>
+            <div className="relative">
+              <div className="flex items-center gap-2 bg-white/95 backdrop-blur-md border border-gray-200 rounded-xl px-4 py-2 shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
+                {searching || autoLocating
+                  ? <Loader2 className="w-4 h-4 text-[#111] shrink-0 animate-spin" />
+                  : <Search className="w-4 h-4 text-gray-400 shrink-0" />
+                }
+                <input
+                  type="text"
+                  value={manualQuery}
+                  onChange={(e) => handleManualSearch(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearchEnter()}
+                  placeholder={searchLocation ? `Showing: ${searchLocation}` : 'Search any property location...'}
+                  className="flex-1 text-[13px] font-semibold text-gray-900 placeholder:text-gray-400 placeholder:font-medium bg-transparent focus:outline-none min-w-0"
+                />
+                {manualQuery && (
+                  <button onClick={() => { setManualQuery(''); setSuggestions([]); }}>
+                    <X className="w-4 h-4 text-gray-400 hover:text-[#111] transition-colors" />
+                  </button>
+                )}
+              </div>
+
+              {suggestions.length > 0 && (
+                <div className="absolute left-0 right-0 top-full bg-white/95 backdrop-blur-md border border-gray-100 rounded-xl shadow-[0_12px_40px_rgb(0,0,0,0.12)] overflow-hidden z-30">
+                  {suggestions.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => selectSuggestion(s)}
+                      className="w-full flex items-start gap-2.5 px-3 py-2 hover:bg-gray-50 text-left border-b border-gray-50 last:border-0 transition-colors"
+                    >
+                      <MapPin className="w-3.5 h-3.5 text-[#111] mt-0.5 shrink-0" />
+                      <span className="text-[12px] font-semibold text-gray-800 leading-tight line-clamp-2">{s.display_name}</span>
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
-
-            {suggestions.length > 0 && (
-              <div className="absolute left-0 right-0 top-full mt-2 bg-white/95 backdrop-blur-md border border-gray-100 rounded-xl shadow-[0_12px_40px_rgb(0,0,0,0.12)] overflow-hidden z-30">
-                {suggestions.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => selectSuggestion(s)}
-                    className="w-full flex items-start gap-3 px-4 py-3 hover:bg-gray-50 text-left border-b border-gray-50 last:border-0 transition-colors"
-                  >
-                    <MapPin className="w-4 h-4 text-[#111] mt-0.5 shrink-0" />
-                    <span className="text-[13px] font-semibold text-gray-800 leading-snug line-clamp-2">{s.display_name}</span>
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
 
           {/* Theme Toggles */}

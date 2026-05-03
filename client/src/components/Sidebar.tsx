@@ -42,7 +42,7 @@ export function Sidebar({ isOpen, setIsOpen, isToggleable }: { isOpen: boolean, 
 
   return (
     <aside className={clsx(
-      "fixed left-0 top-0 h-screen w-[260px] z-50 flex flex-col bg-[#FDFDFD] border-r border-[#E5E5E5] transition-transform duration-300",
+      "fixed left-0 top-0 h-screen w-[260px] z-50 flex flex-col bg-[#FDFDFD] border-r border-[#E5E5E5] transition-transform duration-300 print:hidden",
       isOpen ? "translate-x-0 shadow-[4px_0_24px_rgba(0,0,0,0.02)]" : "-translate-x-full"
     )}>
       {/* ── Logo ── */}

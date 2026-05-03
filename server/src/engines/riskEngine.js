@@ -473,19 +473,76 @@ function analyseLegalOwnership(property) {
 }
 
 /* ─────────────────────────────────────────────────────────────
+   SECTION M: BORROWER CREDIT RISK (LTV Capping)
+   Used strictly for risk scoring and LTV capping, not valuation.
+   CIBIL < 650: High Risk, capping LTV to 40%
+   CIBIL 650-750: Caution, capping LTV to 60%
+   CIBIL > 750: Safe, standard RBI caps apply
+───────────────────────────────────────────────────────────── */
+function analyseBorrowerCredit(creditData, requestedLTV, marketValue) {
+  const { cibilScore, existingEMIs } = creditData;
+  const flags = [];
+  let score = 0;
+  let cappedLTV = 1.0;
+
+  if (cibilScore) {
+    if (cibilScore < 650) {
+      flags.push({
+        code: 'LOW_CIBIL_SCORE',
+        message: `Borrower CIBIL score of ${cibilScore} is below standard lending threshold — critical credit risk, capping LTV to 40%`,
+        severity: 'critical'
+      });
+      score += 35;
+      cappedLTV = 0.40;
+    } else if (cibilScore < 720) {
+      flags.push({
+        code: 'MODERATE_CIBIL_SCORE',
+        message: `Borrower CIBIL score of ${cibilScore} indicates moderate risk — caution advised, capping LTV to 60%`,
+        severity: 'medium'
+      });
+      score += 15;
+      cappedLTV = 0.60;
+    }
+  }
+
+  if (existingEMIs && marketValue) {
+    // Proxy for DTI (Debt to Income) using property value as a wealth proxy
+    const monthlyPropertyWealthProxy = (marketValue * 0.08) / 12; // 8% annual yield proxy
+    const dtiProxy = existingEMIs / monthlyPropertyWealthProxy;
+    
+    if (dtiProxy > 0.60) {
+      flags.push({
+        code: 'HIGH_DEBT_OBLIGATION',
+        message: 'High existing EMI obligations relative to collateral yield proxy — potential repayment risk',
+        severity: 'critical'
+      });
+      score += 25;
+    }
+  }
+
+  return { flags, score, cappedLTV };
+}
+
+/* ─────────────────────────────────────────────────────────────
    MAIN RUN FUNCTION
+   Updated to handle creditData separately.
 ───────────────────────────────────────────────────────────── */
 function run(property, marketData, valuationResult, distressResult, comparables) {
   const start = Date.now();
   const redFlags = [];
   let riskScore = 0;
 
-  const { declaredValue, propertyType, yearOfConstruction, purpose } = property;
+  const { declaredValue, propertyType, yearOfConstruction, purpose, cibilScore, existingLoans, existingEMIs } = property;
   const { marketValue, overCircleRatePercent, pricePerSqft } = valuationResult;
   const propertyAge = valuationResult.propertyAge;
   const yoyAppreciation = marketData.yoyAppreciation ?? 5;
 
-  // Run all checks
+  // 1. Borrower Credit Analysis (ISOLATED from valuation)
+  const creditResult = analyseBorrowerCredit({ cibilScore, existingLoans, existingEMIs }, (declaredValue / marketValue), marketValue);
+  redFlags.push(...creditResult.flags);
+  riskScore += creditResult.score;
+
+  // 2. Technical & Market Risk
   const deviationResult = analyseValuationDeviation(declaredValue, marketValue);
   redFlags.push(...deviationResult.flags);
   riskScore += deviationResult.score;
@@ -522,7 +579,6 @@ function run(property, marketData, valuationResult, distressResult, comparables)
   redFlags.push(...dataResult.flags);
   riskScore += dataResult.score;
 
-  // New: legal & ownership checks (PS requirement)
   const legalResult = analyseLegalOwnership(property);
   redFlags.push(...legalResult.flags);
   riskScore += legalResult.score;
@@ -543,7 +599,24 @@ function run(property, marketData, valuationResult, distressResult, comparables)
     overallRiskLabel,
     declaredVsMarketDeviation: deviationResult.deviation,
     encumbrancePrior: cersaiResult.encumbrancePrior,
+    cappedLTV: creditResult.cappedLTV,
+    
+    // Structured Credit Analysis for Dashboard
+    creditScoring: {
+      creditAnalysis: {
+        score: cibilScore || 0,
+        category: cibilScore >= 750 ? 'safe' : (cibilScore >= 650 ? 'caution' : 'high_risk'),
+        description: cibilScore ? `CIBIL score ${cibilScore}` : 'CIBIL score not provided'
+      },
+      ltvAdjustment: {
+        base: RBI_LTV_CAPS[purpose] || 0.75,
+        adjusted: Math.min(RBI_LTV_CAPS[purpose] || 0.75, creditResult.cappedLTV),
+        adjustment: creditResult.cappedLTV < 1.0 ? (1.0 - creditResult.cappedLTV) : 0
+      }
+    },
+    
     riskBreakdown: {
+      borrowerCredit: creditResult.score,
       valuationDeviation: deviationResult.score,
       circleRateRisk: circleResult.score,
       distressRisk: distressRiskResult.score,

@@ -3,27 +3,30 @@ const Valuation = require('../models/Valuation');
 const MarketData = require('../models/MarketData');
 const ComparableTransaction = require('../models/ComparableTransaction');
 
-// ── Existing Engines (unchanged) ────────────────────────────
+// ── Existing Engines ────────────────────────────
 const valuationEngine = require('../engines/valuationEngine');
 const distressEngine = require('../engines/distressEngine');
 const liquidityEngine = require('../engines/liquidityEngine');
 const riskEngine = require('../engines/riskEngine');
 const confidenceEngine = require('../engines/confidenceEngine');
 
-// ── New Services (additive layer) ───────────────────────────
-const decisionEngine = require('../services/decisionEngine');
-const sanctionEngine = require('../services/sanctionEngine');
-const auditEngine = require('../services/auditEngine');
-const explanationEngine = require('../services/explanationEngine');
-const scenarioSimulator = require('../services/scenarioSimulator');
+// ── New Real-Time Services (Problem Statement Integration) ───────────────────────────
+const { integrateMarketData } = require('../services/marketDataIntegrator');
 
 async function createValuation(req, res, next) {
   const globalStart = Date.now();
   try {
     const body = req.body;
 
-    // Normalize
+    // Normalize property data with applicant information
     const propertyData = {
+      // Applicant Information (NEW)
+      applicantName: body.applicantName,
+      applicantEmail: body.applicantEmail,
+      applicantPhone: body.applicantPhone,
+      applicantPAN: body.applicantPAN,
+      
+      // Property Information
       propertyType: body.propertyType?.toLowerCase(),
       propertySubType: body.propertySubType || null,
       city: body.city,
@@ -36,7 +39,10 @@ async function createValuation(req, res, next) {
       totalFloors: body.totalFloors ? parseInt(body.totalFloors) : 1,
       amenities: body.amenities || [],
       constructionQuality: body.constructionQuality?.toLowerCase() || 'good',
-      declaredValue: parseFloat(body.declaredValue),
+      // Loan Amount Required (NEW) - Use as primary value
+      loanAmountRequired: parseFloat(body.loanAmountRequired),
+      // Keep declaredValue for backward compatibility (set to loan amount or 0)
+      declaredValue: parseFloat(body.loanAmountRequired) || 0,
       purpose: body.purpose || 'lap',
       ownershipType: body.ownershipType || 'freehold',
       titleClarity: body.titleClarity || 'clear',
@@ -44,54 +50,73 @@ async function createValuation(req, res, next) {
       monthlyRent: body.monthlyRent ? parseFloat(body.monthlyRent) : null,
       marketScenario: body.marketScenario || 'normal',
       images: body.images || [],
+      
+      // New fields from enhanced form
+      hasMunicipalApproval: body.hasMunicipalApproval || true,
+      hasEncumbranceCertificate: body.hasEncumbranceCertificate || false,
+      hasSaleDeed: body.hasSaleDeed || true,
+      propertyTaxPaid: body.propertyTaxPaid || true,
+    };
+
+    // Credit Information (NEW)
+    const creditData = {
+      cibilScore: body.cibilScore ? parseInt(body.cibilScore) : null,
+      existingLoans: body.existingLoans ? parseFloat(body.existingLoans) : null,
+      existingEMIs: body.existingEMIs ? parseFloat(body.existingEMIs) : null,
     };
 
     // Save property
     const property = new Property(propertyData);
     await property.save();
 
-    // Get market data
-    const marketDataQuery = {
-      city: { $regex: new RegExp(`^${body.city}$`, 'i') },
-      locality: { $regex: new RegExp(`^${body.locality}$`, 'i') },
+    // ── NEW: Real-time Market Data Integration (Problem Statement Priority) ─────────────────────
+    const marketDataResult = await integrateMarketData(propertyData);
+    
+    // Use real-time market data instead of static database
+    const marketData = {
+      city: marketDataResult.city || propertyData.city,
+      locality: marketDataResult.locality || propertyData.locality,
+      avgPricePerSqft: marketDataResult.avgPricePerSqft,
+      circleRate: marketDataResult.circleRate,
+      demandIndex: marketDataResult.demandIndex,
+      yoyAppreciation: marketDataResult.yoyAppreciation,
+      marketAbsorptionRate: marketDataResult.marketAbsorptionRate,
+      connectivity: marketDataResult.connectivity,
+      infrastructureScore: marketDataResult.infrastructureScore,
+      propertyCount: marketDataResult.propertyCount,
+      // Problem Statement Required: Market Activity Proxies
+      marketActivityProxies: marketDataResult.marketActivityProxies,
+      marketConfidence: marketDataResult.marketConfidence,
+      dataSources: marketDataResult.dataSources
     };
-    let marketData = await MarketData.findOne(marketDataQuery);
 
-    // Fuzzy fallback: just match city
-    if (!marketData) {
-      marketData = await MarketData.findOne({ city: { $regex: new RegExp(`^${body.city}$`, 'i') } });
-    }
-
-    if (!marketData) {
-      return res.status(404).json({ success: false, message: `No market data found for ${body.city}. Please seed the database.` });
-    }
-
-    // Get comparables
-    const comparables = await ComparableTransaction.find({
-      city: { $regex: new RegExp(`^${body.city}$`, 'i') },
-      locality: { $regex: new RegExp(`^${body.locality}$`, 'i') },
-    }).limit(5).lean();
+    // Use real-time comparables instead of database
+    const comparables = marketDataResult.comparables || [];
 
     const auditTrail = [];
 
-    // ── Engine Pipeline ──────────────────────────────────────
-    // Order matters: Liquidity → Valuation → Distress → Risk → Confidence
-    // Each engine feeds data into the next.
+    // ── ENHANCED Engine Pipeline with Real-time Data ──────────────────────────────
 
-    // 1. Liquidity first — needed by distress engine
-    //    Pass null for marketValue on first run (no declared vs market yet)
+    // 1. Liquidity first — needed by distress engine (uses real-time market data)
     const liquidityResult = liquidityEngine.run(propertyData, marketData, null);
     auditTrail.push({ engine: 'LiquidityEngine', timestamp: new Date(), duration: liquidityResult.duration, output: liquidityResult });
 
-    // 2. Valuation — uses comparables for Sales Comparison Approach
+    // 2. Valuation — uses real-time comparables for Sales Comparison Approach
     const valuationResult = valuationEngine.run(propertyData, marketData, comparables);
+    console.log('Valuation engine result:', JSON.stringify(valuationResult, null, 2));
     auditTrail.push({ engine: 'ValuationEngine', timestamp: new Date(), duration: valuationResult.duration, output: valuationResult });
+
+    // Safety check for valuation results
+    if (!valuationResult || isNaN(valuationResult.marketValue) || !isFinite(valuationResult.marketValue)) {
+      console.error('Invalid valuation result:', valuationResult);
+      throw new Error('Valuation engine returned invalid results');
+    }
 
     // 3. Re-run liquidity with actual market value for price-vs-median adjustment
     const liquidityResultFinal = liquidityEngine.run(propertyData, marketData, valuationResult.marketValue);
     auditTrail.push({ engine: 'LiquidityEngine(final)', timestamp: new Date(), duration: liquidityResultFinal.duration, output: liquidityResultFinal });
 
-    // 4. Distress — needs liquidity score, market data (for yoy), and property age
+    // 4. Distress — needs liquidity score, real market data, and property age
     const distressResult = distressEngine.run(
       propertyData,
       valuationResult.marketValue,
@@ -101,11 +126,11 @@ async function createValuation(req, res, next) {
     );
     auditTrail.push({ engine: 'DistressEngine', timestamp: new Date(), duration: distressResult.duration, output: distressResult });
 
-    // 5. Risk — comprehensive regulatory checks
+    // 5. Risk — comprehensive regulatory checks (enhanced with location intelligence)
     const riskResult = riskEngine.run(propertyData, marketData, valuationResult, distressResult, comparables);
     auditTrail.push({ engine: 'RiskEngine', timestamp: new Date(), duration: riskResult.duration, output: riskResult });
 
-    // 6. Confidence — uses methodology from valuation engine
+    // 6. Confidence — uses methodology from valuation engine (enhanced with real-time data)
     const confidenceResult = confidenceEngine.run(
       propertyData,
       marketData,
@@ -117,89 +142,41 @@ async function createValuation(req, res, next) {
 
     const processingTime = Date.now() - globalStart;
 
-    // ── Service Layer (additive — does not modify engine outputs) ──
-
-    // Scenario simulation (optional input field)
-    const marketScenario = body.marketScenario || 'normal';
-    const scenarioResult = scenarioSimulator.run(
-      valuationResult.marketValue,
-      distressResult.distressValue,
-      marketScenario
-    );
-
-    // Decision engine
-    const decisionResult = decisionEngine.run({
-      confidenceScore: confidenceResult.confidenceScore,
-      riskScore: riskResult.riskScore,
-      overallRiskLabel: riskResult.overallRiskLabel,
-      redFlags: riskResult.redFlags,
-      liquidityScore: liquidityResultFinal.liquidityScore,
-      distressResult,
-      propertyType: propertyData.propertyType,
-      purpose: propertyData.purpose,
-    });
-
-    // Sanction engine
-    const sanctionResult = sanctionEngine.run({
-      distressValue: distressResult.distressValue,
-      marketValue: valuationResult.marketValue,
-      propertyType: propertyData.propertyType,
-      purpose: propertyData.purpose,
-      confidenceScore: confidenceResult.confidenceScore,
-      decision: decisionResult.decision,
-    });
-
-    // Audit engine
-    const auditEngineResult = auditEngine.run({
-      property: propertyData,
-      marketData,
-      valuationResult,
-      liquidityResult: liquidityResultFinal,
-      distressResult,
-      riskResult,
-      confidenceResult,
-      decisionResult,
-      sanctionResult,
-      comparables,
-      scenarioApplied: scenarioResult,
-    });
-
-    // Explanation engine
-    const explanationResult = explanationEngine.run({
-      property: propertyData,
-      marketData,
-      valuationResult,
-      liquidityResult: liquidityResultFinal,
-      distressResult,
-      riskResult,
-      confidenceResult,
-      decisionResult,
-      sanctionResult,
-      scenarioApplied: scenarioResult,
-    });
-
-    // Build valuation document
+    // Build valuation document with safety checks
     const valuation = new Valuation({
       propertyId: property._id,
-      propertySnapshot: propertyData,
-      marketValue: valuationResult.marketValue,
-      valueRangeLow: valuationResult.valueRangeLow,
-      valueRangeHigh: valuationResult.valueRangeHigh,
-      pricePerSqft: valuationResult.pricePerSqft,
-      valueDrivers: valuationResult.valueDrivers,
-      distressValue: distressResult.distressValue,
-      distressMultiplier: distressResult.distressMultiplier,
-      rbiErosionFlag: distressResult.rbiErosionFlag,
-      liquidationTimeline: distressResult.liquidationTimeline,
-      resaleRisk: distressResult.resaleRisk,
-      liquidityScore: liquidityResultFinal.liquidityScore,
-      timeToSell: liquidityResultFinal.timeToSell,
-      exitCertainty: liquidityResultFinal.exitCertainty,
-      riskScore: riskResult.riskScore,
-      redFlags: riskResult.redFlags,
-      overallRiskLabel: riskResult.overallRiskLabel,
-      confidenceScore: confidenceResult.confidenceScore,
-      confidenceBreakdown: confidenceResult.confidenceBreakdown,
+      propertySnapshot: {
+        ...propertyData,
+        applicantName: body.applicantName,
+        applicantEmail: body.applicantEmail,
+        applicantPhone: body.applicantPhone,
+        loanAmountRequired: parseFloat(body.loanAmountRequired) || 0
+      },
+      marketValue: isNaN(valuationResult.marketValue) ? 0 : valuationResult.marketValue,
+      valueRangeLow: isNaN(valuationResult.valueRangeLow) ? 0 : valuationResult.valueRangeLow,
+      valueRangeHigh: isNaN(valuationResult.valueRangeHigh) ? 0 : valuationResult.valueRangeHigh,
+      pricePerSqft: isNaN(valuationResult.pricePerSqft) ? 0 : valuationResult.pricePerSqft,
+      valueDrivers: valuationResult.valueDrivers || {},
+      distressValue: isNaN(distressResult.distressValue) ? 0 : distressResult.distressValue,
+      distressMultiplier: distressResult.distressMultiplier || 1.0,
+      rbiErosionFlag: distressResult.rbiErosionFlag || false,
+      liquidationTimeline: distressResult.liquidationTimeline || 'N/A',
+      resaleRisk: distressResult.resaleRisk || 'medium',
+      liquidityScore: isNaN(liquidityResultFinal.liquidityScore) ? 0 : liquidityResultFinal.liquidityScore,
+      timeToSell: liquidityResultFinal.timeToSell || 'N/A',
+      exitCertainty: isNaN(liquidityResultFinal.exitCertainty) ? 'medium' : 
+        liquidityResultFinal.exitCertainty > 0.7 ? 'high' : 
+        liquidityResultFinal.exitCertainty > 0.4 ? 'medium' : 'low',
+      riskScore: isNaN(riskResult.riskScore) ? 0 : riskResult.riskScore,
+      redFlags: riskResult.redFlags || [],
+      overallRiskLabel: riskResult.overallRiskLabel || 'medium',
+      confidenceScore: isNaN(confidenceResult.confidenceScore) ? 0 : confidenceResult.confidenceScore,
+      confidenceBreakdown: confidenceResult.confidenceBreakdown || {},
+      
+      // Borrower Credit & LTV (Problem Statement Requirement)
+      creditScoring: riskResult.creditScoring || {},
+      adjustedLTV: riskResult.creditScoring?.ltvAdjustment?.adjusted || 0.75,
+      
       comparables,
       auditTrail,
       processingTime,
@@ -213,36 +190,8 @@ async function createValuation(req, res, next) {
       data: {
         valuationId: valuation._id,
         propertyId: property._id,
-        ...valuation.toObject(),
-        marketData: {
-          city: marketData.city,
-          locality: marketData.locality,
-          avgPricePerSqft: marketData.avgPricePerSqft,
-          circleRate: marketData.circleRate,
-          demandIndex: marketData.demandIndex,
-          yoyAppreciation: marketData.yoyAppreciation,
-        },
-        // Extras from engines (existing — unchanged)
-        overCircleRatePercent: valuationResult.overCircleRatePercent,
-        overPricedFlag: valuationResult.overPricedFlag,
-        propertyAge: valuationResult.propertyAge,
-        declaredVsMarketDeviation: riskResult.declaredVsMarketDeviation,
-        liquidityBreakdown: liquidityResultFinal.breakdown,
-        valuationMethodology: valuationResult.methodology,
-        riskBreakdown: riskResult.riskBreakdown,
-        encumbrancePrior: riskResult.encumbrancePrior,
-        distressRegulatory: distressResult.regulatoryBasis,
-
-        // ── New service layer outputs ──────────────────────
-        decision: decisionResult.decision,
-        decisionDetail: decisionResult,
-        sanctionAmount: sanctionResult.sanctionAmount,
-        sanctionAmountFormatted: sanctionResult.sanctionAmountFormatted,
-        sanctionDetail: sanctionResult,
-        auditTrailEnhanced: auditEngineResult,
-        explanation: explanationResult,
-        scenario: scenarioResult,
-      },
+        ...valuation.toObject()
+      }
     });
   } catch (err) {
     next(err);

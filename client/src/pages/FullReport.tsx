@@ -129,7 +129,7 @@ export default function FullReport() {
               <Row label="Occupancy" value={<span className="capitalize">{((p as any)?.occupancyStatus || 'self_occupied').replace('_', ' ')}</span>} />
               {(p as any)?.monthlyRent && <Row label="Monthly Rent" value={`₹${Number((p as any).monthlyRent).toLocaleString('en-IN')}`} />}
               <Row label="Purpose" value={p?.purpose?.toUpperCase()} />
-              <Row label="Declared Value" value={formatCurrency(p?.declaredValue || 0)} />
+              <Row label="Loan Amount Required" value={formatCurrency(p?.loanAmountRequired || 0)} />
             </div>
           </Section>
 

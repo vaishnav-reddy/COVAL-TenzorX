@@ -4,14 +4,14 @@ import { motion } from 'framer-motion';
 import {
   BarChart3, Shield, AlertTriangle, TrendingUp,
   ArrowRight, Building2, MapPin, Activity,
-  CheckCircle2, XCircle, Zap, ChevronUp, ChevronDown,
-  FileText, Clock,
+  CheckCircle2, XCircle, Zap, RefreshCw, ChevronDown,
 } from 'lucide-react';
 import { getHistory } from '../utils/api';
 import { Badge } from '../components/ui/Badge';
 import { formatCurrencyShort, formatDate, getRiskColor } from '../utils/format';
 import { useAuth } from '../context/AuthContext';
 import { ValuationResult } from '../types';
+import { useState } from 'react';
 
 /* ── helpers ─────────────────────────────────────────────── */
 function pct(a: number, b: number) {
@@ -35,13 +35,12 @@ function buildMonthlyTrend(items: ValuationResult[]) {
     .slice(-8);
 }
 
-// Confidence buckets for histogram + ogive
 const CONF_BUCKETS = [
-  { range: '0–40',  label: '0–40',  min: 0,  max: 40,  color: '#ef4444' },
-  { range: '40–55', label: '40–55', min: 40, max: 55,  color: '#f97316' },
-  { range: '55–70', label: '55–70', min: 55, max: 70,  color: '#f59e0b' },
-  { range: '70–85', label: '70–85', min: 70, max: 85,  color: '#10b981' },
-  { range: '85–100',label: '85+',   min: 85, max: 101, color: '#059669' },
+  { range: '0-40',  label: '0-40',  min: 0,  max: 40,  color: '#ef4444' },
+  { range: '40-55', label: '40-55', min: 40, max: 55,  color: '#f97316' },
+  { range: '55-70', label: '55-70', min: 55, max: 70,  color: '#f59e0b' },
+  { range: '70-85', label: '70-85', min: 70, max: 85,  color: '#10b981' },
+  { range: '85+',   label: '85+',   min: 85, max: 101, color: '#059669' },
 ];
 
 function buildConfidenceBuckets(items: ValuationResult[]) {
@@ -53,60 +52,29 @@ function buildConfidenceBuckets(items: ValuationResult[]) {
   return buckets;
 }
 
-// Ogive = cumulative frequency curve
 function buildOgive(items: ValuationResult[]) {
   const buckets = buildConfidenceBuckets(items);
   let cumulative = 0;
   const total = items.length || 1;
   return buckets.map((b) => {
     cumulative += b.count;
-    return {
-      label: b.range,
-      upperBound: b.max === 101 ? 100 : b.max,
-      cumCount: cumulative,
-      cumPct: Math.round((cumulative / total) * 100),
-    };
+    return { label: b.range, upperBound: b.max === 101 ? 100 : b.max, cumCount: cumulative, cumPct: Math.round((cumulative / total) * 100) };
   });
 }
 
-/* ═══════════════════════════════════════════════════════════
-   SVG CHART PRIMITIVES
-═══════════════════════════════════════════════════════════ */
-
+/* ── SVG primitives ──────────────────────────────────────── */
 function GridLines({ w, h, steps = 4 }: { w: number; h: number; steps?: number }) {
-  return (
-    <>
-      {Array.from({ length: steps + 1 }).map((_, i) => {
-        const y = (i / steps) * h;
-        return <line key={i} x1={0} y1={y} x2={w} y2={y} stroke="#f1f5f9" strokeWidth={0.8} />;
-      })}
-    </>
-  );
+  return <>{Array.from({ length: steps + 1 }).map((_, i) => <line key={i} x1={0} y1={(i / steps) * h} x2={w} y2={(i / steps) * h} stroke="#f1f5f9" strokeWidth={0.8} />)}</>;
 }
 
-/* ── Area Chart ──────────────────────────────────────────── */
 interface LinePoint { label: string; value: number; value2?: number }
-
-function AreaChartSVG({
-  data,
-  color1 = '#111111',
-  color2,
-  height = 180,
-}: {
-  data: LinePoint[];
-  color1?: string;
-  color2?: string;
-  height?: number;
-}) {
+function AreaChartSVG({ data, color1 = '#1C2333', color2, height = 180 }: { data: LinePoint[]; color1?: string; color2?: string; height?: number }) {
   const PAD = { top: 12, right: 8, bottom: 28, left: 32 };
   const W = 500; const H = height;
-  const cW = W - PAD.left - PAD.right;
-  const cH = H - PAD.top - PAD.bottom;
+  const cW = W - PAD.left - PAD.right; const cH = H - PAD.top - PAD.bottom;
   if (data.length < 2) return <div className="flex items-center justify-center h-full text-gray-300 text-xs">Not enough data</div>;
-  const vals1 = data.map(d => d.value);
-  const vals2 = color2 ? data.map(d => d.value2 ?? 0) : [];
-  const maxV = Math.max(...vals1, ...vals2, 1);
-  const steps = data.length - 1;
+  const vals1 = data.map(d => d.value); const vals2 = color2 ? data.map(d => d.value2 ?? 0) : [];
+  const maxV = Math.max(...vals1, ...vals2, 1); const steps = data.length - 1;
   const px = (i: number) => PAD.left + (i / steps) * cW;
   const py = (v: number) => PAD.top + cH - (v / maxV) * cH;
   const line1 = data.map((d, i) => `${px(i)},${py(d.value)}`).join(' ');
@@ -117,16 +85,8 @@ function AreaChartSVG({
   return (
     <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
       <defs>
-        <linearGradient id={`ag1-${color1.slice(1)}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color1} stopOpacity="0.22" />
-          <stop offset="100%" stopColor={color1} stopOpacity="0.01" />
-        </linearGradient>
-        {color2 && (
-          <linearGradient id={`ag2-${color2.slice(1)}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color2} stopOpacity="0.18" />
-            <stop offset="100%" stopColor={color2} stopOpacity="0.01" />
-          </linearGradient>
-        )}
+        <linearGradient id={`ag1-${color1.slice(1)}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color1} stopOpacity="0.18" /><stop offset="100%" stopColor={color1} stopOpacity="0.01" /></linearGradient>
+        {color2 && <linearGradient id={`ag2-${color2.slice(1)}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color2} stopOpacity="0.15" /><stop offset="100%" stopColor={color2} stopOpacity="0.01" /></linearGradient>}
       </defs>
       <g transform={`translate(${PAD.left},${PAD.top})`}><GridLines w={cW} h={cH} steps={4} /></g>
       {yTicks.map((t, i) => <text key={i} x={PAD.left - 4} y={t.y + 3} textAnchor="end" fontSize={9} fill="#94a3b8">{t.v}</text>)}
@@ -141,109 +101,47 @@ function AreaChartSVG({
   );
 }
 
-/* ── Bar Chart ───────────────────────────────────────────── */
 interface BarItem { label: string; value: number; color: string }
-
-function BarChartSVG({
-  data,
-  height = 180,
-}: {
-  data: BarItem[];
-  height?: number;
-}) {
+function BarChartSVG({ data, height = 180 }: { data: BarItem[]; height?: number }) {
   const PAD = { top: 20, right: 8, bottom: 28, left: 32 };
-  const W = 500; const H = height;
-  const cW = W - PAD.left - PAD.right;
-  const cH = H - PAD.top - PAD.bottom;
+  const W = 500; const H = height; const cW = W - PAD.left - PAD.right; const cH = H - PAD.top - PAD.bottom;
   const maxV = Math.max(...data.map(d => d.value), 1);
-  const barW = (cW / data.length) * 0.55;
-  const gap = cW / data.length;
-  const yTicks = Array.from({ length: 5 }).map((_, i) => ({
-    v: Math.round((maxV / 4) * i),
-    y: PAD.top + cH - ((maxV / 4) * i / maxV) * cH,
-  }));
+  const barW = (cW / data.length) * 0.55; const gap = cW / data.length;
+  const yTicks = Array.from({ length: 5 }).map((_, i) => ({ v: Math.round((maxV / 4) * i), y: PAD.top + cH - ((maxV / 4) * i / maxV) * cH }));
   return (
     <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
       <g transform={`translate(${PAD.left},${PAD.top})`}><GridLines w={cW} h={cH} steps={4} /></g>
       {yTicks.map((t, i) => <text key={i} x={PAD.left - 4} y={t.y + 3} textAnchor="end" fontSize={9} fill="#94a3b8">{t.v}</text>)}
       {data.map((d, i) => {
-        const bH = Math.max((d.value / maxV) * cH, 2);
-        const x = PAD.left + i * gap + (gap - barW) / 2;
-        const y = PAD.top + cH - bH;
-        return (
-          <g key={i}>
-            <rect x={x + 2} y={y + 2} width={barW} height={bH} rx={4} fill={d.color} opacity={0.1} />
-            <rect x={x} y={y} width={barW} height={bH} rx={4} fill={d.color} opacity={0.88} />
-            {d.value > 0 && <text x={x + barW / 2} y={y - 5} textAnchor="middle" fontSize={9} fontWeight="600" fill={d.color}>{d.value}</text>}
-            <text x={x + barW / 2} y={H - 6} textAnchor="middle" fontSize={9} fill="#94a3b8">{d.label}</text>
-          </g>
-        );
+        const bH = Math.max((d.value / maxV) * cH, 2); const x = PAD.left + i * gap + (gap - barW) / 2; const y = PAD.top + cH - bH;
+        return (<g key={i}><rect x={x} y={y} width={barW} height={bH} rx={4} fill={d.color} opacity={0.88} />{d.value > 0 && <text x={x + barW / 2} y={y - 5} textAnchor="middle" fontSize={9} fontWeight="600" fill={d.color}>{d.value}</text>}<text x={x + barW / 2} y={H - 6} textAnchor="middle" fontSize={9} fill="#94a3b8">{d.label}</text></g>);
       })}
     </svg>
   );
 }
 
-/* ── Ogive (Cumulative Frequency Curve) ─────────────────── */
 interface OgivePoint { label: string; upperBound: number; cumPct: number; cumCount: number }
-
 function OgiveSVG({ data, total, height = 200 }: { data: OgivePoint[]; total: number; height?: number }) {
   const PAD = { top: 16, right: 16, bottom: 32, left: 40 };
-  const W = 500; const H = height;
-  const cW = W - PAD.left - PAD.right;
-  const cH = H - PAD.top - PAD.bottom;
-  const rawPoints = [
-    { x: 0, y: 0, pct: 0 },
-    ...data.map(d => ({ x: d.upperBound, y: d.cumPct, pct: d.cumPct })),
-  ];
+  const W = 500; const H = height; const cW = W - PAD.left - PAD.right; const cH = H - PAD.top - PAD.bottom;
+  const rawPoints = [{ x: 0, y: 0, pct: 0 }, ...data.map(d => ({ x: d.upperBound, y: d.cumPct, pct: d.cumPct }))];
   const px = (xVal: number) => PAD.left + (xVal / 100) * cW;
   const py = (yVal: number) => PAD.top + cH - (yVal / 100) * cH;
-  const pathD = rawPoints.reduce((acc, pt, i) => {
-    if (i === 0) return `M ${px(pt.x)},${py(pt.y)}`;
-    const prev = rawPoints[i - 1];
-    const cpX = (px(prev.x) + px(pt.x)) / 2;
-    return acc + ` C ${cpX},${py(prev.y)} ${cpX},${py(pt.y)} ${px(pt.x)},${py(pt.y)}`;
-  }, '');
+  const pathD = rawPoints.reduce((acc, pt, i) => { if (i === 0) return `M ${px(pt.x)},${py(pt.y)}`; const prev = rawPoints[i - 1]; const cpX = (px(prev.x) + px(pt.x)) / 2; return acc + ` C ${cpX},${py(prev.y)} ${cpX},${py(pt.y)} ${px(pt.x)},${py(pt.y)}`; }, '');
   const areaClose = pathD + ` L ${px(rawPoints[rawPoints.length - 1].x)},${PAD.top + cH} L ${px(0)},${PAD.top + cH} Z`;
-  const medianX = (() => {
-    for (let i = 1; i < rawPoints.length; i++) {
-      if (rawPoints[i].pct >= 50) {
-        const prev = rawPoints[i - 1];
-        const curr = rawPoints[i];
-        const t = (50 - prev.pct) / ((curr.pct - prev.pct) || 1);
-        return prev.x + t * (curr.x - prev.x);
-      }
-    }
-    return 70;
-  })();
-  const yTicks = [0, 25, 50, 75, 100];
-  const xTicks = [0, 40, 55, 70, 85, 100];
+  const medianX = (() => { for (let i = 1; i < rawPoints.length; i++) { if (rawPoints[i].pct >= 50) { const prev = rawPoints[i - 1]; const curr = rawPoints[i]; const t = (50 - prev.pct) / ((curr.pct - prev.pct) || 1); return prev.x + t * (curr.x - prev.x); } } return 70; })();
+  const yTicks = [0, 25, 50, 75, 100]; const xTicks = [0, 40, 55, 70, 85, 100];
   return (
     <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
-      <defs>
-        <linearGradient id="ogive-grad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#111111" stopOpacity="0.2" />
-          <stop offset="100%" stopColor="#111111" stopOpacity="0.01" />
-        </linearGradient>
-      </defs>
-      {yTicks.map(t => (
-        <line key={t} x1={PAD.left} y1={py(t)} x2={PAD.left + cW} y2={py(t)}
-          stroke={t === 50 ? '#e0e7ff' : '#f1f5f9'} strokeWidth={t === 50 ? 1.2 : 0.8}
-          strokeDasharray={t === 50 ? '4,3' : undefined} />
-      ))}
-      {xTicks.map(t => (
-        <line key={t} x1={px(t)} y1={PAD.top} x2={px(t)} y2={PAD.top + cH} stroke="#f1f5f9" strokeWidth={0.8} />
-      ))}
+      <defs><linearGradient id="ogive-grad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#1C2333" stopOpacity="0.18" /><stop offset="100%" stopColor="#1C2333" stopOpacity="0.01" /></linearGradient></defs>
+      {yTicks.map(t => <line key={t} x1={PAD.left} y1={py(t)} x2={PAD.left + cW} y2={py(t)} stroke={t === 50 ? '#e0e7ff' : '#f1f5f9'} strokeWidth={t === 50 ? 1.2 : 0.8} strokeDasharray={t === 50 ? '4,3' : undefined} />)}
+      {xTicks.map(t => <line key={t} x1={px(t)} y1={PAD.top} x2={px(t)} y2={PAD.top + cH} stroke="#f1f5f9" strokeWidth={0.8} />)}
       <path d={areaClose} fill="url(#ogive-grad)" />
-      <line x1={px(medianX)} y1={py(50)} x2={px(medianX)} y2={PAD.top + cH} stroke="#111111" strokeWidth={1} strokeDasharray="4,3" opacity={0.5} />
-      <line x1={PAD.left} y1={py(50)} x2={px(medianX)} y2={py(50)} stroke="#111111" strokeWidth={1} strokeDasharray="4,3" opacity={0.5} />
-      <text x={px(medianX) + 4} y={py(50) - 5} fontSize={8} fill="#111111" fontWeight="600">P50 ≈ {Math.round(medianX)}</text>
-      <path d={pathD} fill="none" stroke="#111111" strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
-      {rawPoints.slice(1).map((pt, i) => (
-        <g key={i}>
-          <circle cx={px(pt.x)} cy={py(pt.y)} r={5} fill="white" stroke="#111111" strokeWidth={2} />
-          <text x={px(pt.x)} y={py(pt.y) - 9} textAnchor="middle" fontSize={8} fontWeight="700" fill="#4f46e5">{pt.pct}%</text>
-        </g>
-      ))}
+      <line x1={px(medianX)} y1={py(50)} x2={px(medianX)} y2={PAD.top + cH} stroke="#1C2333" strokeWidth={1} strokeDasharray="4,3" opacity={0.5} />
+      <line x1={PAD.left} y1={py(50)} x2={px(medianX)} y2={py(50)} stroke="#1C2333" strokeWidth={1} strokeDasharray="4,3" opacity={0.5} />
+      <text x={px(medianX) + 4} y={py(50) - 5} fontSize={8} fill="#1C2333" fontWeight="600">P50 ≈ {Math.round(medianX)}</text>
+      <path d={pathD} fill="none" stroke="#1C2333" strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
+      {rawPoints.slice(1).map((pt, i) => (<g key={i}><circle cx={px(pt.x)} cy={py(pt.y)} r={5} fill="white" stroke="#1C2333" strokeWidth={2} /><text x={px(pt.x)} y={py(pt.y) - 9} textAnchor="middle" fontSize={8} fontWeight="700" fill="#1C2333">{pt.pct}%</text></g>))}
       {yTicks.map(t => <text key={t} x={PAD.left - 5} y={py(t) + 3} textAnchor="end" fontSize={9} fill="#94a3b8">{t}%</text>)}
       {xTicks.map(t => <text key={t} x={px(t)} y={H - 8} textAnchor="middle" fontSize={9} fill="#94a3b8">{t}</text>)}
       <text x={PAD.left + cW / 2} y={H - 1} textAnchor="middle" fontSize={9} fill="#cbd5e1">Confidence Score</text>
@@ -253,83 +151,183 @@ function OgiveSVG({ data, total, height = 200 }: { data: OgivePoint[]; total: nu
   );
 }
 
-/* ── Donut Chart ─────────────────────────────────────────── */
-function DonutChart({
-  data, size = 130, centerLabel, centerSub,
-}: {
-  data: { name: string; value: number; color: string }[];
-  size?: number; centerLabel?: string; centerSub?: string;
-}) {
+function DonutChart({ data, size = 130, centerLabel, centerSub }: { data: { name: string; value: number; color: string }[]; size?: number; centerLabel?: string; centerSub?: string }) {
   const total = data.reduce((s, d) => s + d.value, 0) || 1;
-  const cx = size / 2; const cy = size / 2;
-  const r = size * 0.34; const strokeW = size * 0.16;
-  const circumference = 2 * Math.PI * r;
-  let offset = 0;
+  const cx = size / 2; const cy = size / 2; const r = size * 0.34; const strokeW = size * 0.16;
+  const circumference = 2 * Math.PI * r; let offset = 0;
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
       <circle cx={cx} cy={cy} r={r} fill="none" stroke="#f1f5f9" strokeWidth={strokeW} />
-      {data.map((d, i) => {
-        const dash = (d.value / total) * circumference;
-        const gap = circumference - dash;
-        const seg = (
-          <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={d.color}
-            strokeWidth={strokeW - 2} strokeDasharray={`${dash} ${gap}`}
-            strokeDashoffset={-offset} transform={`rotate(-90 ${cx} ${cy})`} strokeLinecap="round" />
-        );
-        offset += dash;
-        return seg;
-      })}
-      <text x={cx} y={cy - (centerSub ? 5 : 0)} textAnchor="middle" fontSize={size * 0.15} fontWeight="700" fill="#1e293b">
-        {centerLabel ?? total}
-      </text>
+      {data.map((d, i) => { const dash = (d.value / total) * circumference; const gap = circumference - dash; const seg = (<circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={d.color} strokeWidth={strokeW - 2} strokeDasharray={`${dash} ${gap}`} strokeDashoffset={-offset} transform={`rotate(-90 ${cx} ${cy})`} strokeLinecap="round" />); offset += dash; return seg; })}
+      <text x={cx} y={cy - (centerSub ? 5 : 0)} textAnchor="middle" fontSize={size * 0.15} fontWeight="700" fill="#1e293b">{centerLabel ?? total}</text>
       {centerSub && <text x={cx} y={cy + size * 0.12} textAnchor="middle" fontSize={size * 0.09} fill="#94a3b8">{centerSub}</text>}
     </svg>
   );
 }
 
-/* ── Progress Bar ────────────────────────────────────────── */
 function ProgressBar({ value, max, color }: { value: number; max: number; color: string }) {
   const p = max ? Math.round((value / max) * 100) : 0;
   return (
     <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-      <motion.div className="h-full rounded-full" style={{ background: color }}
-        initial={{ width: 0 }} animate={{ width: `${p}%` }} transition={{ duration: 0.8, ease: 'easeOut' }} />
+      <motion.div className="h-full rounded-full" style={{ background: color }} initial={{ width: 0 }} animate={{ width: `${p}%` }} transition={{ duration: 0.8, ease: 'easeOut' }} />
     </div>
   );
 }
 
-/* ── KPI Card ────────────────────────────────────────────── */
-function KpiCard({
-  label, value, sub, icon: Icon, iconColor, iconBg, trend, trendLabel, delay = 0,
-}: {
-  label: string; value: string | number; sub: string;
-  icon: React.ElementType; iconColor: string; iconBg: string;
-  trend?: 'up' | 'down' | null; trendLabel?: string; delay?: number;
-}) {
+/* ── Location Heatmap ────────────────────────────────────── */
+const CITY_DATA: Record<string, { lat: number; lng: number; label: string }> = {
+  mumbai:    { lat: 19.0760, lng: 72.8777, label: 'Mumbai' },
+  pune:      { lat: 18.5204, lng: 73.8567, label: 'Pune' },
+  delhi:     { lat: 28.6139, lng: 77.2090, label: 'Delhi' },
+  bengaluru: { lat: 12.9716, lng: 77.5946, label: 'Bengaluru' },
+  bangalore: { lat: 12.9716, lng: 77.5946, label: 'Bengaluru' },
+  hyderabad: { lat: 17.3850, lng: 78.4867, label: 'Hyderabad' },
+  chennai:   { lat: 13.0827, lng: 80.2707, label: 'Chennai' },
+  ahmedabad: { lat: 23.0225, lng: 72.5714, label: 'Ahmedabad' },
+  kolkata:   { lat: 22.5726, lng: 88.3639, label: 'Kolkata' },
+  jaipur:    { lat: 26.9124, lng: 75.7873, label: 'Jaipur' },
+  surat:     { lat: 21.1702, lng: 72.8311, label: 'Surat' },
+  lucknow:   { lat: 26.8467, lng: 80.9462, label: 'Lucknow' },
+  gurgaon:   { lat: 28.4595, lng: 77.0266, label: 'Gurgaon' },
+  noida:     { lat: 28.5355, lng: 77.3910, label: 'Noida' },
+  chandigarh:{ lat: 30.7333, lng: 76.7794, label: 'Chandigarh' },
+};
+
+// High-fidelity India paths from reference
+const INDIA_PATHS = [
+  "M362.72,399.14 L363.44,400.15 L362.98,403.54 L364.01,404.51 L363.52,407.70 L361.49,409.94 L360.44,405.57 L361.39,404.99 L361.58,401.27 L362.72,399.14Z",
+  "M359.99,420.62 L361.05,422.39 L361.18,424.14 L359.95,426.81 L358.79,426.22 L357.99,424.31 L358.24,422.82 L359.99,420.62Z",
+  "M363.83,397.94 L364.86,399.75 L363.28,401.40 L363.83,397.94Z",
+  "M377.64,476.06 L378.27,477.41 L376.69,479.29 L376.45,477.24 L377.64,476.06Z",
+  "M372.73,466.74 L373.98,468.26 L372.38,468.92 L371.94,467.09 L372.73,466.74Z",
+  "M364.81,388.85 L365.25,388.74 L365.97,388.28 L366.84,391.53 L366.66,394.95 L365.58,397.78 L362.70,397.65 L362.81,393.34 L363.49,392.15 L363.26,389.91 L364.81,388.85Z",
+  "M365.25,388.74 L364.81,388.85 L364.01,386.57 L364.76,380.85 L365.23,379.30 L366.96,378.40 L368.46,381.48 L367.60,384.00 L367.64,385.57 L366.16,385.89 L364.98,388.03 L365.25,388.74Z",
+  "M379.63,479.33 L380.22,481.80 L381.10,483.20 L380.35,484.75 L380.43,486.19 L378.72,485.90 L378.12,483.80 L376.90,483.08 L377.24,480.13 L379.63,479.33Z",
+  "M364.00,447.16 L364.63,448.85 L363.17,449.08 L363.01,447.65 L364.00,447.16Z",
+  "M209.36,327.24 L208.74,327.63 L209.51,329.60 L204.13,332.37 L200.82,333.73 L198.17,332.95 L195.99,333.22 L194.11,334.20 L192.28,338.42 L192.35,339.13 L190.30,341.42 L189.71,343.02 L187.57,343.32 L187.33,341.24 L185.58,340.60 L183.38,341.04 L180.46,342.77 L179.43,343.97 L178.41,347.29 L176.92,349.79 L176.16,353.52 L177.14,359.08 L178.39,361.38 L177.36,368.87 L179.06,373.71 L177.98,375.80 L176.21,377.43 L177.84,379.01 L178.94,379.04 L180.05,380.09 L177.70,379.18 L176.48,378.24 L174.89,379.62 L174.36,381.48 L169.27,382.93 L168.61,381.87 L167.03,381.67 L166.77,383.46 L165.25,385.31 L163.93,384.69 L162.96,386.75 L161.73,386.64 L160.41,385.64 L158.88,385.48 L156.32,385.97 L155.01,387.21 L154.55,390.55 L151.40,393.10 L150.25,392.44 L149.22,390.84 L149.52,389.32 L151.06,388.02 L152.39,388.46 L152.62,386.36 L154.36,384.36 L154.48,382.66 L151.20,381.17 L151.73,377.59 L149.32,377.44 L146.91,375.82 L147.64,373.37 L145.47,371.61 L143.29,371.86 L142.70,373.82 L140.79,374.41 L138.78,375.86 L137.48,373.46 L133.86,373.07 L133.68,374.75 L131.11,374.95 L130.76,373.80 L131.75,372.01 L130.21,370.45 L130.15,368.77 L131.51,368.04 L131.57,369.96 L133.39,370.95 L136.03,370.45 L137.05,369.15 L138.60,368.39 L138.54,366.45 L137.74,365.84 L135.34,366.38 L133.46,365.39 L131.95,366.97 L129.44,365.26 L129.31,363.30 L127.69,361.15 L128.99,357.91 L129.22,355.34 L127.74,355.25 L128.23,353.31 L129.40,354.30 L132.38,354.76 L133.49,352.83 L133.64,350.60 L132.13,349.60 L131.63,347.78 L131.65,344.59 L132.19,340.33 L134.89,339.39 L138.73,339.98 L140.94,340.69 L143.01,340.87 L144.31,340.38 L147.58,341.49 L149.47,339.85 L149.75,338.21 L151.95,337.41 L154.21,337.81 L155.06,337.12 L157.39,338.33 L159.32,335.79 L161.17,334.77 L163.93,334.86 L164.03,330.55 L164.63,329.70 L167.00,329.36 L168.04,328.59 L170.26,328.08 L172.14,327.00 L174.84,328.40 L176.48,325.65 L175.33,324.85 L176.13,323.21 L179.32,322.49 L180.16,324.73 L182.18,326.03 L183.75,326.47 L184.07,323.84 L182.65,323.98 L180.74,323.13 L182.56,321.85 L183.71,320.44 L187.73,322.25 L188.80,319.43 L190.07,319.77 L192.60,318.92 L192.87,317.49 L194.14,317.52 L194.99,316.39 L196.33,316.85 L197.47,315.45 L197.61,313.19 L198.70,311.00 L201.73,309.30 L201.38,308.32 L204.23,306.73 L205.31,305.68 L207.31,305.91 L208.88,306.82 L209.80,305.96 L209.87,301.51 L210.27,300.03 L211.93,297.99 L212.65,298.52 L212.83,300.35 L213.80,300.69 L213.50,302.27 L216.25,301.29 L216.73,299.55 L218.69,300.96 L219.94,300.43 L220.44,296.10 L221.65,294.21 L222.66,294.69 L224.94,293.76 L225.75,292.81 L224.19,290.72 L226.73,290.21 L228.60,289.14 L229.96,290.29 L231.29,290.42 L232.52,293.47 L236.66,294.15 L239.33,293.89 L239.38,292.69 L240.76,291.94 L241.65,290.22 L243.16,288.56 L245.65,289.41 L243.02,292.54 L242.60,293.88 L241.30,295.16 L239.68,297.67 L236.28,300.96 L236.27,301.64 L230.29,304.78 L228.13,306.31 L225.73,309.11 L224.77,311.02 L222.83,313.17 L213.90,317.90 L210.38,320.75 L209.33,322.13 L208.72,324.48 L209.54,325.22 L209.36,327.24Z",
+  "M400.12,167.17 L399.69,164.53 L400.06,163.88 L399.50,161.44 L403.36,159.95 L404.23,157.82 L405.31,158.45 L408.50,157.45 L409.98,157.45 L411.63,156.23 L408.22,152.12 L407.79,150.40 L410.29,147.89 L411.03,146.58 L408.79,146.44 L405.56,146.76 L404.22,147.98 L402.28,148.62 L401.28,148.15 L397.07,149.69 L388.65,153.18 L385.59,151.84 L385.69,153.74 L384.19,154.46 L382.77,156.29 L381.23,157.40 L378.90,159.93 L377.09,162.60 L374.34,163.12 L372.26,162.72 L367.41,163.47 L365.24,162.01 L362.10,161.51 L361.01,162.74 L359.16,162.72 L356.46,163.70 L353.97,163.84 L353.91,162.01 L352.88,161.09 L352.73,159.53 L353.19,155.71 L352.66,154.43 L347.18,154.35 L345.86,151.96 L346.83,150.80 L346.90,149.28 L349.79,149.12 L351.18,150.65 L353.20,149.95 L355.48,148.34 L357.04,149.64 L359.77,148.62 L360.65,148.95 L363.29,146.25 L362.16,145.07 L362.51,144.06 L364.17,142.83 L365.58,142.79 L367.48,141.21 L370.36,140.72 L369.82,139.02 L371.19,137.98 L372.09,135.80 L374.37,135.10 L376.27,135.52 L379.57,134.72 L380.78,135.29 L381.89,133.63 L381.80,132.57 L384.16,130.75 L385.04,128.68 L387.13,127.58 L388.23,126.39 L390.10,126.35 L391.13,124.43 L394.72,127.07 L396.95,127.93 L400.31,128.26 L400.54,129.10 L402.66,129.48 L403.74,128.88 L404.54,126.59 L405.25,126.53 L408.08,124.31 L410.73,123.88 L412.55,122.59 L414.10,124.50 L415.19,127.45 L413.58,129.17 L415.02,130.94 L416.47,129.51 L417.78,129.42 L419.01,130.49 L420.44,133.58 L420.00,134.50 L417.35,137.03 L416.83,139.75 L419.90,138.64 L421.16,138.60 L426.05,141.00 L427.47,140.14 L428.67,141.28 L430.26,141.64 L431.46,142.92 L431.10,144.16 L432.22,145.69 L431.84,147.74 L429.88,147.53 L426.52,150.11 L424.59,152.17 L424.80,154.70 L428.63,159.94 L427.16,160.38 L424.48,158.33 L423.19,156.44 L420.39,156.20 L418.30,157.12 L414.81,157.56 L411.90,158.99 L410.42,161.28 L408.53,161.80 L407.39,163.94 L405.63,165.00 L404.47,164.84 L402.94,166.95 L401.08,167.65 L400.12,167.17Z",
+  "M353.97,163.84 L356.46,163.70 L359.16,162.72 L361.01,162.74 L362.10,161.51 L365.24,162.01 L367.41,163.47 L372.26,162.72 L374.34,163.12 L377.09,162.60 L378.90,159.93 L381.23,157.40 L382.77,156.29 L384.19,154.46 L385.69,153.74 L385.59,151.84 L388.65,153.18 L397.07,149.69 L401.28,148.15 L402.28,148.62 L404.22,147.98 L405.56,146.76 L408.79,146.44 L411.03,146.58 L410.29,147.89 L407.79,150.40 L408.22,152.12 L411.63,156.23 L409.98,157.45 L408.50,157.45 L405.31,158.45 L404.23,157.82 L403.36,159.95 L399.50,161.44 L398.24,162.66 L396.40,163.44 L394.94,163.22 L393.70,165.24 L391.99,166.42 L389.91,166.77 L387.88,168.32 L387.76,169.64 L384.62,170.79 L384.46,172.66 L383.46,172.94 L381.94,175.40 L381.21,178.07 L381.57,179.47 L380.14,180.66 L378.21,179.21 L377.53,180.61 L375.58,182.02 L374.50,183.70 L372.02,185.46 L373.94,187.26 L374.11,189.27 L372.86,190.29 L372.08,192.70 L370.79,193.94 L371.00,195.02 L368.67,199.45 L367.13,203.82 L364.61,204.22 L363.66,201.93 L362.57,204.59 L360.22,207.44 L358.82,207.84 L358.61,206.23 L356.76,206.25 L355.79,202.20 L356.08,199.74 L356.78,198.47 L355.93,195.85 L356.78,195.52 L358.15,196.65 L359.82,195.77 L358.66,193.73 L360.12,191.99 L361.55,192.35 L362.22,191.39 L364.24,190.72 L363.60,188.85 L361.20,186.66 L361.89,185.61 L359.78,184.24 L358.77,182.50 L355.76,182.74 L354.75,183.45 L354.69,179.07 L355.94,177.18 L352.25,177.53 L351.23,178.19 L349.72,176.28 L348.42,177.23 L348.26,178.92 L346.13,177.65 L344.19,180.74 L342.56,180.77 L341.70,182.25 L340.47,182.52 L340.54,180.45 L338.57,181.07 L336.79,179.03 L333.91,178.87 L332.17,179.19 L329.93,177.94 L325.58,179.08 L324.64,178.81 L322.08,181.00 L321.31,182.44 L323.15,184.57 L320.98,185.50 L321.20,184.13 L320.16,181.12 L321.28,179.14 L318.75,175.52 L319.22,173.02 L320.79,172.01 L320.79,166.89 L325.05,166.07 L326.06,164.48 L327.34,164.57 L328.93,163.71 L331.15,165.33 L333.40,165.86 L338.43,165.67 L339.06,165.02 L342.60,165.67 L343.66,164.77 L344.90,165.51 L347.77,165.26 L350.87,163.48 L353.05,164.58 L353.97,163.84Z",
+  "M294.97,169.59 L296.74,170.54 L297.71,172.50 L295.54,174.13 L292.94,176.88 L291.08,177.47 L290.79,180.25 L292.09,180.56 L291.91,181.88 L294.12,183.15 L293.72,184.81 L289.85,187.73 L291.29,189.78 L290.27,190.70 L288.75,189.26 L286.73,188.93 L285.63,190.37 L283.43,190.66 L282.95,192.80 L280.83,193.85 L280.99,196.07 L280.09,197.42 L279.41,200.55 L277.63,199.97 L276.52,201.45 L275.38,200.34 L273.77,201.29 L272.81,200.58 L271.37,201.98 L270.59,204.37 L269.09,203.17 L268.40,201.33 L267.12,200.47 L265.88,200.60 L265.75,198.97 L264.66,197.77 L263.19,198.54 L262.12,197.44 L260.04,197.08 L257.67,200.61 L256.35,201.45 L253.34,201.83 L249.96,203.63 L247.67,204.32 L247.41,202.86 L246.16,201.79 L241.13,204.85 L239.38,203.94 L239.24,202.22 L237.21,201.38 L236.05,202.56 L235.12,200.46 L233.38,201.49 L230.25,202.18 L227.03,201.83 L227.67,200.24 L225.39,197.70 L224.91,196.31 L224.96,192.24 L224.63,191.32 L227.64,189.14 L228.86,188.95 L230.49,187.65 L231.47,187.64 L233.21,185.27 L235.56,184.00 L239.13,183.45 L240.03,182.22 L241.63,183.35 L243.57,181.49 L242.22,180.15 L240.67,179.91 L236.90,177.77 L234.70,175.85 L236.78,174.24 L236.96,172.18 L235.49,172.01 L232.99,169.87 L235.13,169.46 L235.64,167.87 L238.44,168.56 L239.23,167.20 L238.15,165.20 L235.20,163.87 L235.03,161.41 L233.54,160.64 L234.12,158.91 L232.93,157.97 L232.34,156.50 L232.52,155.25 L234.86,155.17 L235.87,154.28 L238.21,154.88 L238.79,155.96 L243.60,156.70 L244.65,158.68 L243.94,161.37 L246.70,161.82 L248.73,163.48 L252.09,164.27 L252.30,166.01 L254.13,166.28 L258.56,164.19 L260.04,165.41 L260.01,167.68 L261.74,169.06 L264.37,167.49 L266.79,168.32 L268.77,168.24 L271.94,169.55 L274.73,171.41 L276.24,171.14 L278.92,169.65 L281.09,171.70 L284.14,171.64 L285.58,171.12 L287.63,172.07 L290.34,170.66 L293.32,171.89 L294.84,171.16 L294.97,169.59Z",
+  "M128.56,102.96 L127.19,102.80 L126.66,101.77 L128.69,101.71 L128.56,102.96Z",
+  "M224.46,208.66 L227.16,209.84 L227.96,212.49 L229.94,213.17 L230.22,215.39 L231.11,216.72 L234.76,217.61 L233.93,220.22 L235.47,221.04 L234.93,224.12 L236.34,225.03 L236.61,226.92 L239.89,226.74 L238.64,230.14 L237.68,231.66 L235.62,232.18 L234.47,234.03 L235.04,234.94 L234.49,236.49 L232.38,236.88 L230.79,238.50 L229.21,238.79 L227.62,241.51 L227.58,242.98 L228.30,244.90 L226.92,245.37 L226.82,246.54 L225.30,248.61 L224.62,250.49 L225.49,252.04 L223.67,252.43 L222.49,256.27 L221.45,256.83 L219.04,255.63 L217.90,256.05 L214.32,256.05 L214.12,257.86 L212.10,260.00 L211.71,261.27 L210.05,260.31 L209.88,262.32 L210.37,264.48 L209.72,265.61 L211.27,267.66 L210.75,269.11 L211.04,271.25 L210.71,273.54 L213.76,274.73 L215.37,274.66 L215.30,277.21 L211.46,276.06 L209.95,277.23 L208.34,274.53 L207.57,274.85 L204.08,272.86 L202.97,273.92 L202.72,275.98 L205.82,277.98 L205.62,281.91 L206.70,283.75 L207.64,283.85 L207.18,286.29 L208.07,289.10 L208.47,291.99 L207.49,292.23 L207.32,293.91 L204.47,295.52 L204.27,297.19 L201.43,300.00 L197.98,302.45 L197.24,307.09 L195.87,309.71 L193.94,309.62 L192.55,308.97 L190.68,309.98 L189.37,305.31 L186.28,303.85 L187.07,302.53 L186.17,300.04 L184.78,298.28 L182.58,296.52 L180.49,297.19 L179.40,295.08 L180.59,293.38 L179.40,291.70 L180.24,288.28 L181.15,287.52 L182.47,285.17 L183.83,284.12 L184.45,285.62 L186.50,285.95 L187.91,284.76 L188.61,283.08 L187.66,281.52 L185.14,280.72 L185.27,279.44 L182.37,277.31 L183.50,274.71 L183.42,272.74 L181.26,272.19 L181.10,270.62 L182.99,270.17 L184.56,269.14 L184.09,268.15 L184.63,264.81 L183.50,262.21 L183.44,259.51 L182.17,259.54 L181.70,258.29 L182.20,255.67 L184.82,254.43 L185.13,253.14 L186.22,250.87 L186.05,247.02 L187.41,246.45 L187.79,243.43 L188.88,240.48 L190.18,241.41 L190.48,238.72 L191.88,237.67 L191.82,235.31 L193.42,235.15 L194.96,233.98 L197.27,234.48 L199.28,233.74 L199.88,232.25 L201.44,231.74 L201.54,228.37 L204.06,227.03 L204.03,225.09 L205.30,225.06 L207.17,224.07 L207.68,221.12 L206.39,219.96 L204.59,219.71 L203.71,217.80 L202.39,218.13 L201.05,217.23 L199.15,218.21 L199.08,216.71 L200.33,214.76 L199.02,212.64 L199.95,211.48 L201.74,213.31 L203.71,212.33 L205.61,213.17 L207.88,212.99 L209.78,213.44 L213.58,213.13 L214.62,211.77 L216.85,210.88 L218.78,212.28 L220.96,212.24 L222.48,211.56 L224.46,208.66Z",
+  "M37.95,262.24 L38.95,258.61 L41.09,259.33 L41.23,261.26 L40.47,262.23 L41.11,263.11 L40.14,263.41 L37.95,262.24Z",
+  "M133.98,132.16 L136.18,136.30 L136.20,137.91 L134.80,138.30 L133.67,139.52 L132.29,137.73 L129.44,137.91 L128.83,137.14 L130.55,134.76 L130.37,132.90 L132.34,131.88 L133.98,132.16Z",
+  "M75.43,272.54 L74.30,273.15 L71.85,272.40 L71.81,271.09 L73.87,270.77 L75.43,272.54Z",
+  "M82.27,343.13 L86.18,342.86 L87.40,345.06 L88.85,344.32 L90.75,344.26 L90.77,346.91 L92.03,350.06 L91.45,354.12 L90.11,356.02 L88.43,356.44 L86.50,353.70 L85.17,348.40 L83.52,346.82 L82.27,343.13Z",
+  "M3.81,213.42 L4.81,213.58 L4.28,215.84 L2.50,215.91 L3.81,213.42Z",
+  "M44.34,199.36 L47.15,200.54 L49.96,199.47 L52.51,200.12 L55.68,199.45 L56.68,200.23 L58.28,198.96 L59.94,200.43 L60.89,200.13 L61.85,201.65 L62.78,201.42 L64.35,203.75 L65.53,202.15 L67.78,202.95 L68.30,204.49 L70.30,204.42 L71.12,205.05 L72.25,202.74 L73.84,203.45 L74.75,204.66 L73.47,207.32 L75.55,208.71 L78.35,209.47 L78.51,211.40 L77.58,212.51 L78.45,213.83 L80.76,215.82 L82.95,219.72 L84.51,219.17 L85.43,220.93 L87.47,221.01 L88.96,222.02 L88.86,223.47 L90.62,223.32 L91.75,225.34 L92.89,227.96 L94.05,228.61 L92.65,232.06 L90.90,232.04 L89.25,234.09 L90.79,235.97 L89.81,237.23 L88.05,236.61 L87.86,237.81 L88.80,238.98 L88.43,242.15 L89.14,243.13 L84.20,245.23 L85.46,247.21 L84.40,248.84 L84.94,250.49 L88.02,249.47 L89.74,249.46 L90.67,251.02 L87.98,250.71 L86.53,252.15 L86.23,253.67 L84.51,254.15 L84.37,255.69 L83.34,256.62 L83.67,258.28 L85.61,258.72 L86.25,262.58 L85.30,262.79 L84.61,264.61 L83.28,265.39 L81.63,265.20 L79.36,262.99 L78.18,264.18 L79.63,265.83 L78.58,267.85 L78.58,271.19 L76.83,271.17 L75.43,272.54 L73.87,270.77 L71.81,271.09 L70.40,270.88 L69.32,272.49 L68.38,272.31 L68.64,269.81 L70.55,266.47 L70.74,265.08 L69.18,260.11 L66.17,253.77 L66.76,248.55 L65.43,247.78 L65.90,245.22 L64.91,243.12 L65.58,239.98 L65.48,238.49 L62.84,239.10 L61.22,244.01 L61.40,246.56 L62.01,248.36 L60.79,251.40 L58.71,254.50 L59.18,255.29 L57.16,256.50 L54.85,257.29 L51.10,259.25 L49.25,260.54 L45.84,261.62 L43.90,262.67 L41.11,263.11 L40.47,262.23 L41.23,261.26 L41.09,259.33 L38.95,258.61 L37.95,262.24 L34.49,260.81 L29.48,256.77 L23.67,249.79 L16.69,243.32 L12.64,238.58 L12.33,237.38 L13.04,235.74 L16.13,235.59 L15.60,237.37 L16.70,238.25 L21.55,236.68 L22.92,236.63 L24.01,234.79 L25.03,235.98 L27.32,233.89 L28.59,233.36 L30.42,233.54 L32.48,230.23 L33.14,227.46 L31.52,226.67 L29.96,227.55 L25.04,228.74 L23.68,230.51 L21.45,229.67 L20.23,229.98 L18.51,229.09 L16.18,228.93 L10.54,225.26 L9.72,225.05 L7.25,222.91 L7.91,220.78 L5.93,218.86 L5.73,216.19 L9.09,212.58 L6.97,212.20 L6.59,210.88 L9.57,210.90 L9.92,205.57 L11.02,206.94 L12.49,205.85 L13.28,206.66 L14.64,205.97 L16.22,206.51 L17.84,205.85 L20.66,206.20 L22.13,205.83 L23.95,207.48 L28.02,207.62 L29.77,205.62 L36.49,203.54 L36.48,206.24 L39.89,206.71 L42.73,204.50 L43.06,200.17 L44.34,199.36Z",
+  "M114.60,72.62 L115.35,71.54 L115.19,69.71 L113.45,67.90 L114.52,66.94 L115.68,67.66 L117.86,65.74 L119.98,65.29 L122.25,62.82 L125.06,62.49 L127.24,62.94 L129.41,63.98 L131.20,65.98 L133.23,66.13 L136.48,68.62 L139.83,66.72 L141.73,66.27 L144.71,69.57 L144.54,70.74 L145.71,72.45 L147.34,71.24 L149.10,71.13 L151.44,69.64 L151.70,71.86 L150.34,72.60 L150.54,74.23 L152.02,73.65 L153.62,75.15 L152.84,77.31 L154.71,78.36 L154.43,79.32 L157.33,81.87 L156.16,85.18 L156.79,86.81 L158.22,88.04 L156.38,89.60 L157.69,90.65 L158.19,92.62 L159.34,93.76 L160.66,96.07 L158.81,96.20 L157.69,94.63 L155.52,94.80 L154.74,94.13 L152.90,94.65 L151.22,93.25 L147.26,94.86 L144.31,95.44 L142.96,98.41 L142.86,100.19 L141.37,101.63 L142.71,103.32 L141.98,104.37 L143.01,105.76 L139.52,107.48 L139.70,107.80 L137.36,107.42 L136.32,106.56 L134.21,106.26 L133.46,102.89 L131.41,102.06 L129.78,99.57 L127.83,99.42 L125.47,97.85 L125.85,94.50 L123.09,93.01 L121.77,91.25 L120.84,92.80 L119.03,93.00 L118.74,91.28 L116.52,87.54 L115.32,84.80 L114.92,82.67 L111.90,80.88 L110.91,78.10 L112.59,77.47 L114.18,75.78 L115.48,75.18 L114.28,73.72 L114.60,72.62Z",
+  "M127.83,99.42 L129.78,99.57 L131.41,102.06 L133.46,102.89 L134.21,106.26 L136.32,106.56 L137.36,107.42 L139.70,107.80 L137.33,112.25 L135.21,113.20 L133.88,115.48 L133.33,118.69 L132.48,120.38 L133.28,122.93 L132.95,123.98 L133.02,128.33 L134.38,129.93 L133.98,132.16 L132.34,131.88 L130.37,132.90 L130.55,134.76 L128.83,137.14 L129.44,137.91 L132.29,137.73 L133.67,139.52 L134.80,138.30 L136.20,137.91 L138.22,139.44 L138.49,141.57 L138.29,145.37 L138.88,147.17 L135.29,149.18 L133.09,149.67 L131.79,148.97 L130.79,151.58 L129.47,150.90 L130.32,147.38 L130.02,146.12 L130.66,143.77 L129.02,142.44 L128.15,143.56 L124.42,145.45 L123.42,143.60 L122.03,143.86 L118.76,146.10 L117.78,148.19 L115.93,148.25 L116.63,145.49 L115.54,144.58 L117.26,142.48 L114.84,139.76 L111.01,137.31 L109.93,136.21 L109.30,132.65 L108.14,129.76 L107.35,128.90 L107.57,125.82 L103.33,126.39 L101.04,125.50 L100.66,124.17 L99.39,123.54 L98.15,124.31 L95.79,124.21 L95.21,123.31 L96.05,121.56 L95.34,120.98 L95.92,117.94 L93.85,117.38 L95.15,116.13 L94.64,114.88 L96.42,115.22 L98.80,114.09 L100.49,114.79 L101.58,116.28 L102.70,115.91 L104.42,116.56 L105.14,117.95 L104.06,119.39 L105.87,120.23 L108.28,117.06 L109.28,117.83 L112.14,117.05 L113.96,116.99 L114.70,118.03 L117.00,118.04 L119.20,115.76 L119.29,113.71 L120.24,112.29 L122.23,111.93 L123.87,112.74 L125.72,112.28 L125.90,110.67 L125.09,109.86 L127.65,106.93 L128.75,107.01 L129.95,104.35 L128.56,102.96 L128.69,101.71 L127.83,99.42Z",
+  "M227.03,201.83 L230.25,202.18 L233.38,201.49 L235.12,200.46 L236.05,202.56 L237.21,201.38 L239.24,202.22 L239.38,203.94 L241.13,204.85 L246.16,201.79 L247.41,202.86 L247.67,204.32 L249.96,203.63 L253.34,201.83 L256.35,201.45 L257.67,200.61 L260.04,197.08 L262.12,197.44 L263.19,198.54 L264.66,197.77 L265.75,198.97 L265.88,200.60 L267.12,200.47 L268.40,201.33 L269.09,203.17 L270.59,204.37 L271.37,201.98 L272.81,200.58 L273.77,201.29 L275.38,200.34 L276.52,201.45 L277.63,199.97 L279.41,200.55 L280.09,197.42 L280.99,196.07 L280.83,193.85 L282.95,192.80 L283.43,190.66 L285.63,190.37 L286.73,188.93 L288.75,189.26 L290.27,190.70 L290.11,192.77 L291.59,193.79 L293.01,195.90 L291.77,196.60 L291.74,201.26 L290.55,201.54 L290.60,203.76 L289.81,205.42 L288.06,206.89 L288.83,207.88 L285.94,208.44 L285.78,210.07 L282.17,209.63 L283.00,211.92 L280.49,213.58 L277.11,212.22 L276.02,213.32 L275.60,215.31 L274.15,215.19 L271.71,216.25 L270.40,216.24 L269.20,217.63 L269.40,218.60 L267.50,219.61 L264.61,218.42 L261.94,218.79 L262.12,221.15 L261.36,222.12 L262.66,224.26 L264.46,224.04 L267.05,226.47 L268.32,226.13 L270.30,227.57 L270.05,229.93 L271.39,231.13 L273.03,231.58 L273.53,233.15 L275.12,233.21 L276.98,237.67 L275.71,238.97 L274.58,238.94 L273.44,238.20 L269.12,236.85 L268.04,235.24 L264.24,234.04 L263.47,238.49 L264.31,239.42 L262.52,242.93 L260.39,242.56 L258.68,240.95 L257.13,241.00 L254.99,239.85 L253.60,240.68 L252.58,242.39 L251.72,241.30 L249.52,240.60 L250.21,238.03 L250.10,234.72 L247.61,235.68 L242.19,235.65 L240.71,236.80 L238.69,236.98 L236.68,235.96 L236.42,234.84 L234.47,234.03 L235.62,232.18 L237.68,231.66 L238.64,230.14 L239.89,226.74 L236.61,226.92 L236.34,225.03 L234.93,224.12 L235.47,221.04 L233.93,220.22 L234.76,217.61 L231.11,216.72 L230.22,215.39 L229.94,213.17 L227.96,212.49 L227.16,209.84 L224.46,208.66 L225.61,206.02 L225.23,205.24 L225.48,202.24 L227.03,201.83Z",
+  "M152.02,73.65 L150.54,74.23 L150.34,72.60 L151.70,71.86 L151.44,69.64 L149.10,71.13 L147.34,71.24 L145.71,72.45 L144.54,70.74 L144.71,69.57 L141.73,66.27 L139.83,66.72 L136.48,68.62 L133.23,66.13 L131.20,65.98 L129.41,63.98 L127.24,62.94 L125.06,62.49 L122.25,62.82 L119.98,65.29 L117.86,65.74 L115.68,67.66 L114.52,66.94 L113.45,67.90 L115.19,69.71 L115.35,71.54 L114.60,72.62 L112.22,75.16 L107.85,76.66 L106.49,76.45 L103.79,75.21 L102.27,73.97 L101.43,74.68 L99.31,73.90 L97.29,74.08 L96.46,72.06 L96.96,71.31 L96.05,69.71 L93.99,70.45 L91.96,70.26 L88.38,68.00 L85.16,66.46 L82.92,66.46 L80.67,64.08 L81.10,62.48 L80.25,59.34 L81.03,58.51 L80.47,56.46 L80.89,54.74 L79.83,53.78 L80.61,52.12 L80.04,50.15 L78.99,49.20 L78.85,45.87 L78.15,44.29 L78.43,41.63 L79.34,40.75 L82.08,39.93 L83.06,37.28 L86.42,37.09 L87.26,36.53 L88.46,33.45 L88.46,32.19 L87.19,31.07 L84.04,30.00 L82.71,28.50 L84.39,26.19 L83.69,24.81 L82.22,24.88 L76.68,24.13 L75.35,23.04 L74.23,20.31 L70.16,19.07 L68.76,19.87 L66.66,19.19 L66.59,16.15 L67.57,13.74 L71.00,11.39 L74.16,8.13 L74.79,6.40 L76.19,5.61 L84.18,6.16 L85.16,3.09 L86.42,4.07 L88.24,4.44 L90.42,3.21 L96.73,0.76 L99.74,1.50 L100.58,2.35 L103.45,2.23 L105.63,1.13 L106.75,1.62 L111.96,8.15 L116.65,10.49 L118.61,12.09 L120.93,12.77 L123.87,15.31 L125.76,15.49 L127.38,17.04 L127.09,19.09 L128.43,21.39 L132.63,21.89 L135.22,22.57 L136.77,23.82 L138.10,26.56 L140.55,26.81 L143.37,25.66 L147.77,25.13 L149.19,23.13 L150.80,21.89 L154.24,20.95 L155.64,20.02 L158.09,19.83 L161.39,21.02 L162.23,18.97 L164.26,17.85 L166.92,20.02 L171.90,21.14 L174.28,20.27 L176.04,22.82 L178.70,24.31 L178.91,28.31 L177.51,31.00 L177.44,33.57 L175.61,38.29 L171.94,39.88 L171.38,41.96 L168.58,41.96 L167.88,42.53 L169.01,45.57 L168.39,47.94 L166.07,49.69 L163.09,48.90 L159.90,49.77 L159.55,50.53 L160.38,52.63 L161.96,54.99 L159.90,56.86 L159.52,59.24 L161.69,61.07 L161.82,62.15 L163.44,62.75 L166.75,62.95 L165.91,66.15 L168.57,69.67 L168.75,72.12 L167.32,72.46 L165.31,74.05 L164.52,73.47 L162.58,74.42 L162.25,75.90 L160.37,76.37 L157.48,74.24 L156.96,70.69 L155.19,72.12 L154.00,72.04 L152.02,73.65Z",
+  "M88.85,344.32 L90.00,342.67 L92.37,342.34 L92.77,340.30 L94.20,337.31 L94.41,335.00 L91.75,333.49 L91.85,329.83 L95.12,328.55 L96.37,329.47 L97.28,327.23 L99.60,326.34 L100.83,323.61 L103.07,323.48 L104.92,325.22 L105.99,323.38 L108.63,322.89 L109.00,323.57 L111.68,323.30 L111.74,321.15 L110.99,319.93 L111.46,318.46 L110.67,317.79 L111.11,314.99 L113.56,316.72 L115.46,317.46 L120.08,316.64 L121.54,317.04 L121.98,315.68 L121.37,313.11 L123.69,312.05 L124.20,310.48 L127.21,310.83 L128.31,308.72 L129.99,307.97 L130.08,304.74 L130.55,303.64 L132.07,304.16 L135.90,299.32 L137.27,300.37 L138.08,302.43 L139.33,301.93 L140.75,306.71 L139.33,309.53 L139.51,310.66 L137.86,311.56 L137.71,313.32 L141.33,314.54 L137.88,316.71 L136.53,320.06 L138.04,320.99 L138.59,322.54 L137.91,324.12 L138.07,329.33 L135.42,332.24 L139.94,333.29 L138.35,336.16 L138.73,339.98 L134.89,339.39 L132.19,340.33 L131.65,344.59 L131.63,347.78 L132.13,349.60 L133.64,350.60 L133.49,352.83 L132.38,354.76 L129.40,354.30 L128.23,353.31 L127.74,355.25 L129.22,355.34 L128.99,357.91 L127.69,361.15 L129.31,363.30 L129.44,365.26 L131.95,366.97 L133.46,365.39 L135.34,366.38 L137.74,365.84 L138.54,366.45 L138.60,368.39 L137.05,369.15 L136.03,370.45 L133.39,370.95 L131.57,369.96 L131.51,368.04 L130.15,368.77 L130.21,370.45 L131.75,372.01 L130.76,373.80 L131.11,374.95 L133.68,374.75 L133.86,373.07 L137.48,373.46 L138.78,375.86 L140.79,374.41 L142.70,373.82 L143.29,371.86 L145.47,371.61 L147.64,373.37 L146.91,375.82 L149.32,377.44 L151.73,377.59 L151.20,381.17 L154.48,382.66 L154.36,384.36 L152.62,386.36 L152.39,388.46 L151.06,388.02 L149.52,389.32 L149.22,390.84 L147.75,390.56 L146.65,389.40 L145.69,390.15 L144.75,388.82 L143.01,390.29 L142.01,392.26 L139.93,392.36 L139.75,394.78 L140.44,395.26 L140.12,397.24 L138.09,399.67 L141.93,400.24 L142.55,401.23 L140.96,403.91 L138.36,404.01 L137.40,406.92 L135.42,406.16 L132.74,406.72 L131.29,406.08 L129.74,406.40 L128.52,409.39 L124.74,409.18 L123.91,407.77 L122.72,408.39 L119.19,405.11 L118.07,405.31 L118.07,403.39 L116.40,404.15 L114.66,403.87 L113.52,401.78 L112.31,401.92 L110.24,400.50 L107.14,395.67 L105.02,393.89 L103.95,392.06 L99.77,390.81 L99.09,389.24 L97.24,381.29 L96.88,376.70 L95.94,372.96 L94.38,370.45 L92.21,362.74 L91.55,362.46 L90.92,359.34 L90.01,359.29 L88.81,357.90 L88.43,356.44 L90.11,356.02 L91.45,354.12 L92.03,350.06 L90.77,346.91 L90.75,344.26 L88.85,344.32Z",
+  "M99.77,390.81 L103.95,392.06 L105.02,393.89 L107.14,395.67 L110.24,400.50 L112.31,401.92 L113.52,401.78 L114.66,403.87 L116.40,404.15 L118.07,403.39 L118.07,405.31 L119.19,405.11 L122.72,408.39 L121.64,409.62 L119.81,409.91 L120.58,411.36 L122.53,412.01 L124.44,414.28 L123.67,415.72 L125.66,415.99 L127.37,417.03 L126.05,420.19 L128.53,421.19 L129.71,422.65 L128.71,425.63 L128.38,428.37 L128.56,430.29 L130.79,431.68 L133.63,429.47 L135.36,431.70 L134.16,437.18 L134.29,439.49 L133.46,441.35 L135.71,441.56 L137.06,443.11 L135.16,446.41 L134.93,448.78 L133.17,450.89 L134.80,453.34 L133.51,455.29 L135.13,458.50 L132.64,462.35 L130.85,460.95 L125.79,453.71 L124.53,452.65 L124.13,450.78 L121.46,444.40 L119.98,435.58 L117.94,428.92 L115.15,422.31 L114.38,418.68 L112.58,413.30 L111.80,411.78 L110.84,411.31 L109.73,408.03 L107.71,405.52 L106.97,405.17 L105.66,402.82 L104.41,401.39 L101.34,394.91 L99.77,390.81Z",
+  "M69.20,414.83 L69.02,415.52 L68.77,416.11 L69.02,415.14 L69.20,414.83Z",
+  "M89.14,243.13 L91.26,243.43 L92.71,242.07 L94.77,243.86 L94.53,246.78 L95.23,247.50 L98.65,248.65 L100.29,248.33 L102.58,249.38 L103.43,251.07 L104.98,251.85 L109.81,252.47 L114.83,252.03 L117.25,252.79 L117.93,252.45 L119.02,255.42 L119.02,257.09 L122.03,257.21 L123.66,255.30 L125.67,255.36 L125.69,253.07 L128.04,250.96 L128.20,248.86 L129.76,248.80 L132.29,246.84 L135.40,246.82 L135.44,246.20 L138.23,246.06 L139.65,248.38 L139.58,249.94 L137.97,249.51 L138.40,252.38 L139.84,252.60 L143.01,251.83 L145.06,252.24 L148.46,250.45 L148.63,249.48 L152.20,248.78 L154.59,250.63 L159.70,250.62 L159.43,248.94 L162.01,248.83 L164.08,246.83 L165.86,247.55 L167.91,247.63 L168.62,249.71 L171.51,248.78 L173.35,249.93 L176.39,249.54 L178.23,248.27 L179.29,248.49 L180.92,250.09 L181.52,251.41 L184.20,253.23 L185.13,253.14 L184.82,254.43 L182.20,255.67 L181.70,258.29 L182.17,259.54 L183.44,259.51 L183.50,262.21 L184.63,264.81 L184.09,268.15 L184.56,269.14 L182.99,270.17 L181.10,270.62 L181.26,272.19 L183.42,272.74 L183.50,274.71 L182.37,277.31 L185.27,279.44 L185.14,280.72 L187.66,281.52 L188.61,283.08 L187.91,284.76 L186.50,285.95 L184.45,285.62 L183.83,284.12 L182.47,285.17 L181.15,287.52 L180.24,288.28 L179.40,291.70 L180.59,293.38 L179.40,295.08 L177.09,295.75 L175.64,294.30 L174.45,294.01 L174.49,290.20 L173.36,288.88 L174.62,287.81 L175.06,284.12 L174.57,283.10 L171.62,280.87 L168.71,281.75 L167.65,282.57 L166.15,281.38 L164.31,280.72 L163.33,283.16 L160.98,281.89 L160.25,280.13 L158.63,280.02 L158.43,278.38 L156.53,278.24 L154.87,277.43 L151.83,277.13 L151.06,279.10 L149.94,279.91 L150.52,283.23 L148.65,283.94 L148.47,286.76 L146.64,286.21 L145.21,285.07 L143.91,285.70 L143.88,287.65 L142.45,289.56 L142.54,290.85 L143.81,291.32 L145.12,293.41 L143.57,293.64 L142.08,297.70 L140.08,298.99 L138.88,301.00 L139.33,301.93 L138.08,302.43 L137.27,300.37 L135.90,299.32 L132.07,304.16 L130.55,303.64 L130.08,304.74 L129.99,307.97 L128.31,308.72 L127.21,310.83 L124.20,310.48 L123.69,312.05 L121.37,313.11 L121.98,315.68 L121.54,317.04 L120.08,316.64 L115.46,317.46 L113.56,316.72 L111.11,314.99 L110.67,317.79 L111.46,318.46 L110.99,319.93 L111.74,321.15 L111.68,323.30 L109.00,323.57 L108.63,322.89 L105.99,323.38 L104.92,325.22 L103.07,323.48 L100.83,323.61 L99.60,326.34 L97.28,327.23 L96.37,329.47 L95.12,328.55 L91.85,329.83 L91.75,333.49 L94.41,335.00 L94.20,337.31 L92.77,340.30 L92.37,342.34 L90.00,342.67 L88.85,344.32 L87.40,345.06 L86.18,342.86 L82.27,343.13 L80.95,340.12 L79.76,339.72 L77.63,331.65 L76.91,330.47 L76.83,325.76 L76.33,324.39 L76.58,322.88 L75.54,318.38 L75.84,317.72 L74.99,315.57 L74.24,311.16 L72.69,307.50 L71.82,304.48 L72.14,302.21 L70.70,299.02 L71.19,297.91 L70.11,295.42 L70.89,292.12 L72.29,290.53 L70.21,290.51 L69.00,287.88 L69.28,285.23 L68.67,284.52 L68.09,281.91 L68.38,280.95 L67.30,275.58 L68.06,274.94 L68.38,272.31 L69.32,272.49 L70.40,270.88 L71.81,271.09 L71.85,272.40 L74.30,273.15 L75.43,272.54 L76.83,271.17 L78.58,271.19 L78.58,267.85 L79.63,265.83 L78.18,264.18 L79.36,262.99 L81.63,265.20 L83.28,265.39 L84.61,264.61 L85.30,262.79 L86.25,262.58 L85.61,258.72 L83.67,258.28 L83.34,256.62 L84.37,255.69 L84.51,254.15 L86.23,253.67 L86.53,252.15 L87.98,250.71 L90.67,251.02 L89.74,249.46 L88.02,249.47 L84.94,250.49 L84.40,248.84 L85.46,247.21 L84.20,245.23 L89.14,243.13Z",
+  "M320.98,185.50 L323.15,184.57 L321.31,182.44 L322.08,181.00 L324.64,178.81 L325.58,179.08 L329.93,177.94 L332.17,179.19 L333.91,178.87 L336.79,179.03 L338.57,181.07 L340.54,180.45 L340.47,182.52 L341.70,182.25 L342.56,180.77 L344.19,180.74 L346.13,177.65 L348.26,178.92 L348.42,177.23 L349.72,176.28 L351.23,178.19 L352.25,177.53 L355.94,177.18 L354.69,179.07 L354.75,183.45 L355.76,182.74 L358.77,182.50 L359.78,184.24 L361.89,185.61 L361.20,186.66 L363.60,188.85 L364.24,190.72 L362.22,191.39 L361.55,192.35 L360.12,191.99 L358.66,193.73 L355.83,192.68 L353.37,191.19 L348.07,191.69 L346.74,191.41 L344.63,192.09 L341.68,190.96 L338.85,191.07 L335.68,191.73 L334.47,191.28 L330.51,191.43 L329.56,191.92 L327.93,191.13 L324.59,190.59 L322.47,189.37 L320.64,189.26 L320.76,186.60 L320.98,185.50Z",
+  "M374.11,189.27 L374.57,190.32 L376.09,190.99 L377.34,188.43 L379.05,186.76 L378.49,185.56 L382.09,184.67 L383.92,185.83 L386.49,186.30 L390.06,184.83 L390.09,186.01 L391.93,186.86 L391.18,188.02 L390.50,190.77 L392.86,192.04 L392.47,195.16 L391.27,196.77 L390.88,198.70 L388.73,201.05 L387.52,204.20 L385.74,207.60 L385.49,209.58 L384.25,212.65 L380.50,210.98 L379.16,211.41 L378.29,210.14 L376.28,210.06 L374.72,211.14 L373.25,209.02 L372.10,209.43 L368.61,209.57 L366.78,208.45 L367.77,204.78 L367.13,203.82 L368.67,199.45 L371.00,195.02 L370.79,193.94 L372.08,192.70 L372.86,190.29 L374.11,189.27Z",
+  "M149.06,164.76 L151.15,164.15 L151.71,164.94 L154.31,166.02 L156.51,165.34 L158.72,166.87 L160.61,167.19 L160.58,168.84 L161.61,170.10 L162.68,172.65 L161.26,173.90 L160.76,176.87 L159.89,177.59 L158.06,181.40 L156.98,182.21 L157.84,184.21 L155.53,185.16 L153.14,184.89 L151.99,185.68 L150.32,188.22 L151.65,191.10 L150.80,192.81 L150.79,194.24 L148.40,196.13 L149.92,199.58 L149.90,203.11 L152.38,205.51 L153.42,203.97 L154.49,204.56 L155.83,206.36 L157.18,206.14 L158.92,206.71 L160.22,204.61 L160.48,203.21 L158.97,200.02 L157.42,200.77 L157.24,196.46 L155.14,194.80 L154.35,190.09 L154.86,187.54 L157.24,188.48 L157.12,186.59 L159.48,185.88 L158.32,188.58 L158.82,191.57 L160.89,190.25 L162.49,191.60 L164.22,192.37 L164.82,191.07 L164.54,189.26 L165.81,188.89 L166.83,190.08 L166.59,192.41 L167.93,192.91 L169.53,192.13 L171.70,191.93 L173.33,192.66 L173.20,190.38 L175.41,189.93 L175.76,188.73 L177.27,188.80 L178.31,187.56 L180.03,188.02 L179.94,189.60 L181.70,191.44 L180.63,191.91 L179.39,193.75 L182.97,192.61 L185.39,193.37 L187.24,191.89 L188.29,193.10 L187.76,195.29 L189.54,195.43 L192.58,194.90 L194.05,193.14 L194.17,191.54 L197.17,192.04 L198.55,191.10 L200.25,193.54 L203.26,194.35 L203.41,195.96 L208.46,198.18 L208.33,199.54 L210.98,200.69 L210.86,199.31 L214.64,199.05 L216.19,199.92 L215.37,204.11 L216.21,205.59 L215.39,208.99 L216.85,210.88 L214.62,211.77 L213.58,213.13 L209.78,213.44 L207.88,212.99 L205.61,213.17 L203.71,212.33 L201.74,213.31 L199.95,211.48 L199.02,212.64 L200.33,214.76 L199.08,216.71 L199.15,218.21 L201.05,217.23 L202.39,218.13 L203.71,217.80 L204.59,219.71 L206.39,219.96 L207.68,221.12 L207.17,224.07 L205.30,225.06 L204.03,225.09 L204.06,227.03 L201.54,228.37 L201.44,231.74 L199.88,232.25 L199.28,233.74 L197.27,234.48 L194.96,233.98 L193.42,235.15 L191.82,235.31 L191.88,237.67 L190.48,238.72 L190.18,241.41 L188.88,240.48 L187.79,243.43 L187.41,246.45 L186.05,247.02 L186.22,250.87 L185.13,253.14 L184.20,253.23 L181.52,251.41 L180.92,250.09 L179.29,248.49 L178.23,248.27 L176.39,249.54 L173.35,249.93 L171.51,248.78 L168.62,249.71 L167.91,247.63 L165.86,247.55 L164.08,246.83 L162.01,248.83 L159.43,248.94 L159.70,250.62 L154.59,250.63 L152.20,248.78 L148.63,249.48 L148.46,250.45 L145.06,252.24 L143.01,251.83 L139.84,252.60 L138.40,252.38 L137.97,249.51 L139.58,249.94 L139.65,248.38 L138.23,246.06 L135.44,246.20 L135.40,246.82 L132.29,246.84 L129.76,248.80 L128.20,248.86 L128.04,250.96 L125.69,253.07 L125.67,255.36 L123.66,255.30 L122.03,257.21 L119.02,257.09 L119.02,255.42 L117.93,252.45 L117.25,252.79 L114.83,252.03 L109.81,252.47 L104.98,251.85 L103.43,251.07 L102.58,249.38 L100.29,248.33 L98.65,248.65 L95.23,247.50 L94.53,246.78 L94.77,243.86 L92.71,242.07 L91.26,243.43 L89.14,243.13 L88.43,242.15 L88.80,238.98 L87.86,237.81 L88.05,236.61 L89.81,237.23 L90.79,235.97 L89.25,234.09 L90.90,232.04 L92.65,232.06 L94.05,228.61 L92.89,227.96 L91.75,225.34 L92.76,224.54 L94.54,224.92 L96.86,223.11 L96.52,222.17 L94.63,221.07 L96.03,218.94 L99.45,217.45 L100.86,214.55 L100.34,212.31 L101.63,209.81 L99.98,206.86 L98.54,205.20 L99.05,202.87 L97.49,202.09 L98.77,197.52 L100.15,199.77 L101.73,198.92 L101.84,197.51 L99.65,197.24 L99.13,195.38 L102.37,196.50 L103.49,196.02 L104.08,193.51 L106.83,193.55 L106.71,194.83 L105.59,196.01 L106.24,197.23 L105.67,198.53 L108.40,199.16 L110.78,199.24 L112.93,198.01 L115.26,201.12 L115.14,202.97 L113.40,202.66 L112.45,203.78 L113.14,206.74 L112.70,208.05 L112.97,210.32 L111.60,209.75 L110.34,210.42 L109.32,209.51 L108.46,211.56 L110.32,213.49 L112.48,212.57 L114.69,212.14 L116.12,211.37 L115.89,209.88 L118.46,208.76 L118.27,207.14 L121.30,206.22 L124.31,207.67 L125.53,206.40 L128.29,208.36 L129.75,208.18 L130.40,206.98 L128.87,204.85 L129.03,202.76 L131.24,202.62 L132.18,201.14 L131.62,198.88 L128.97,198.24 L128.30,197.13 L130.14,196.65 L129.07,194.07 L131.13,192.95 L132.36,193.31 L133.72,192.41 L135.69,192.89 L137.10,192.42 L137.21,190.60 L135.72,187.23 L134.25,189.24 L132.34,188.78 L130.61,189.47 L126.52,188.69 L125.36,187.99 L124.15,185.73 L124.28,181.43 L126.00,179.65 L128.37,178.94 L129.57,176.69 L131.02,176.06 L133.05,174.36 L134.22,174.37 L136.16,172.45 L137.60,172.32 L141.07,170.02 L143.21,169.28 L145.85,166.90 L147.23,167.22 L147.44,165.39 L149.06,164.76Z",
+  "M356.76,206.25 L358.61,206.23 L358.82,207.84 L360.22,207.44 L362.57,204.59 L363.66,201.93 L364.61,204.22 L367.13,203.82 L367.77,204.78 L366.78,208.45 L368.61,209.57 L372.10,209.43 L373.00,211.41 L373.10,214.12 L373.68,215.39 L372.52,220.65 L372.93,224.12 L371.52,226.25 L369.09,225.58 L369.17,227.74 L368.48,231.01 L369.26,232.78 L368.77,233.86 L369.94,235.54 L370.20,238.21 L369.40,239.53 L367.81,239.22 L367.26,242.65 L364.84,241.38 L362.97,239.95 L362.47,242.11 L361.37,242.77 L361.43,239.62 L360.22,233.37 L360.22,231.86 L358.98,228.05 L357.92,227.39 L358.19,225.41 L357.71,222.53 L357.99,220.52 L357.15,218.74 L356.74,215.22 L356.34,214.65 L356.21,213.26 L356.98,210.92 L357.35,207.93 L356.76,206.25Z",
+  "M399.50,161.44 L400.06,163.88 L399.69,164.53 L400.12,167.17 L397.61,170.78 L398.62,171.96 L398.39,176.42 L399.35,176.90 L396.84,180.24 L397.39,182.00 L395.69,183.50 L395.21,185.13 L393.85,186.28 L391.93,186.86 L390.09,186.01 L390.06,184.83 L386.49,186.30 L383.92,185.83 L382.09,184.67 L378.49,185.56 L379.05,186.76 L377.34,188.43 L376.09,190.99 L374.57,190.32 L374.11,189.27 L373.94,187.26 L372.02,185.46 L374.50,183.70 L375.58,182.02 L377.53,180.61 L378.21,179.21 L380.14,180.66 L381.57,179.47 L381.21,178.07 L381.94,175.40 L383.46,172.94 L384.46,172.66 L384.62,170.79 L387.76,169.64 L387.88,168.32 L389.91,166.77 L391.99,166.42 L393.70,165.24 L394.94,163.22 L396.40,163.44 L398.24,162.66 L399.50,161.44Z",
+  "M234.47,234.03 L236.42,234.84 L236.68,235.96 L238.69,236.98 L240.71,236.80 L242.19,235.65 L247.61,235.68 L250.10,234.72 L250.21,238.03 L249.52,240.60 L251.72,241.30 L252.58,242.39 L253.60,240.68 L254.99,239.85 L257.13,241.00 L258.68,240.95 L260.39,242.56 L262.52,242.93 L264.31,239.42 L263.47,238.49 L264.24,234.04 L268.04,235.24 L269.12,236.85 L273.44,238.20 L274.58,238.94 L276.19,240.87 L278.03,241.06 L279.17,242.57 L279.11,244.56 L282.12,243.13 L282.53,245.38 L285.20,246.23 L285.77,248.68 L284.26,249.69 L281.62,249.64 L278.38,251.85 L277.07,253.37 L276.06,256.23 L278.22,261.31 L276.04,262.33 L275.99,264.24 L276.13,263.71 L277.69,263.09 L278.66,263.34 L275.48,265.90 L274.67,268.00 L275.43,268.95 L273.94,270.27 L272.08,271.13 L269.29,275.24 L258.96,278.69 L254.86,280.82 L251.24,283.42 L247.89,286.39 L245.65,289.41 L243.16,288.56 L241.65,290.22 L240.76,291.94 L239.38,292.69 L239.33,293.89 L236.66,294.15 L232.52,293.47 L231.29,290.42 L229.96,290.29 L228.60,289.14 L226.73,290.21 L224.19,290.72 L225.75,292.81 L224.94,293.76 L222.66,294.69 L221.65,294.21 L220.44,296.10 L219.94,300.43 L218.69,300.96 L216.73,299.55 L216.25,301.29 L213.50,302.27 L213.80,300.69 L212.83,300.35 L212.65,298.52 L211.93,297.99 L210.27,300.03 L209.87,301.51 L209.80,305.96 L208.88,306.82 L207.31,305.91 L205.31,305.68 L204.23,306.73 L201.38,308.32 L199.97,308.58 L199.21,309.57 L195.87,309.71 L197.24,307.09 L197.98,302.45 L201.43,300.00 L204.27,297.19 L204.47,295.52 L207.32,293.91 L207.49,292.23 L208.47,291.99 L208.07,289.10 L207.18,286.29 L207.64,283.85 L206.70,283.75 L205.62,281.91 L205.82,277.98 L202.72,275.98 L202.97,273.92 L204.08,272.86 L207.57,274.85 L208.34,274.53 L209.95,277.23 L211.46,276.06 L215.30,277.21 L215.37,274.66 L213.76,274.73 L210.71,273.54 L211.04,271.25 L210.75,269.11 L211.27,267.66 L209.72,265.61 L210.37,264.48 L209.88,262.32 L210.05,260.31 L211.71,261.27 L212.10,260.00 L214.12,257.86 L214.32,256.05 L217.90,256.05 L219.04,255.63 L221.45,256.83 L222.49,256.27 L223.67,252.43 L225.49,252.04 L224.62,250.49 L225.30,248.61 L226.82,246.54 L226.92,245.37 L228.30,244.90 L227.58,242.98 L227.62,241.51 L229.21,238.79 L230.79,238.50 L232.38,236.88 L234.49,236.49 L235.04,234.94 L234.47,234.03Z",
+  "M277.69,263.09 L276.13,263.71 L275.99,264.24 L276.04,262.33 L277.69,263.09Z",
+  "M114.60,72.62 L114.28,73.72 L115.48,75.18 L114.18,75.78 L112.59,77.47 L110.91,78.10 L111.90,80.88 L114.92,82.67 L115.32,84.80 L116.52,87.54 L118.74,91.28 L119.03,93.00 L120.84,92.80 L121.77,91.25 L123.09,93.01 L125.85,94.50 L125.47,97.85 L127.83,99.42 L128.69,101.71 L126.66,101.77 L127.19,102.80 L128.56,102.96 L129.95,104.35 L128.75,107.01 L127.65,106.93 L125.09,109.86 L125.90,110.67 L125.72,112.28 L123.87,112.74 L122.23,111.93 L120.24,112.29 L119.29,113.71 L119.20,115.76 L117.00,118.04 L114.70,118.03 L113.96,116.99 L112.14,117.05 L109.28,117.83 L108.28,117.06 L105.87,120.23 L104.06,119.39 L105.14,117.95 L104.42,116.56 L102.70,115.91 L101.58,116.28 L100.49,114.79 L98.80,114.09 L96.42,115.22 L94.64,114.88 L85.39,114.45 L86.50,112.03 L86.49,110.84 L85.09,108.06 L86.75,105.94 L88.36,104.74 L90.41,102.42 L91.65,100.37 L94.92,98.03 L95.62,96.39 L94.43,95.70 L94.53,93.55 L96.46,90.54 L94.62,86.32 L95.84,83.70 L98.92,82.59 L99.85,81.06 L101.81,81.41 L103.45,80.54 L105.26,80.47 L107.09,78.10 L106.49,76.45 L107.85,76.66 L112.22,75.16 L114.60,72.62Z",
+  "M172.51,406.00 L171.57,404.41 L173.06,403.87 L172.51,406.00Z",
+  "M173.26,421.96 L171.43,420.62 L172.53,419.20 L173.31,419.36 L173.26,421.96Z",
+  "M86.49,110.84 L86.50,112.03 L85.39,114.45 L94.64,114.88 L95.15,116.13 L93.85,117.38 L95.92,117.94 L95.34,120.98 L96.05,121.56 L95.21,123.31 L95.79,124.21 L98.15,124.31 L99.39,123.54 L100.66,124.17 L101.04,125.50 L103.33,126.39 L107.57,125.82 L107.35,128.90 L108.14,129.76 L109.30,132.65 L109.93,136.21 L111.01,137.31 L114.84,139.76 L117.26,142.48 L115.54,144.58 L116.63,145.49 L115.93,148.25 L117.78,148.19 L118.76,146.10 L122.03,143.86 L123.42,143.60 L124.42,145.45 L128.15,143.56 L129.02,142.44 L130.66,143.77 L130.02,146.12 L130.32,147.38 L129.47,150.90 L130.79,151.58 L131.79,148.97 L133.09,149.67 L135.29,149.18 L136.27,151.65 L136.16,153.62 L137.56,154.72 L137.59,155.72 L139.69,156.89 L141.14,158.91 L139.44,161.54 L141.60,162.13 L137.45,164.27 L138.31,165.54 L141.78,164.04 L142.33,163.13 L144.35,163.91 L147.61,162.88 L149.83,163.36 L149.06,164.76 L147.44,165.39 L147.23,167.22 L145.85,166.90 L143.21,169.28 L141.07,170.02 L137.60,172.32 L136.16,172.45 L134.22,174.37 L133.05,174.36 L131.02,176.06 L129.57,176.69 L128.37,178.94 L126.00,179.65 L124.28,181.43 L124.15,185.73 L125.36,187.99 L126.52,188.69 L130.61,189.47 L132.34,188.78 L134.25,189.24 L135.72,187.23 L137.21,190.60 L137.10,192.42 L135.69,192.89 L133.72,192.41 L132.36,193.31 L131.13,192.95 L129.07,194.07 L130.14,196.65 L128.30,197.13 L128.97,198.24 L131.62,198.88 L132.18,201.14 L131.24,202.62 L129.03,202.76 L128.87,204.85 L130.40,206.98 L129.75,208.18 L128.29,208.36 L125.53,206.40 L124.31,207.67 L121.30,206.22 L118.27,207.14 L118.46,208.76 L115.89,209.88 L116.12,211.37 L114.69,212.14 L112.48,212.57 L110.32,213.49 L108.46,211.56 L109.32,209.51 L110.34,210.42 L111.60,209.75 L112.97,210.32 L112.70,208.05 L113.14,206.74 L112.45,203.78 L113.40,202.66 L115.14,202.97 L115.26,201.12 L112.93,198.01 L110.78,199.24 L108.40,199.16 L105.67,198.53 L106.24,197.23 L105.59,196.01 L106.71,194.83 L106.83,193.55 L104.08,193.51 L103.49,196.02 L102.37,196.50 L99.13,195.38 L99.65,197.24 L101.84,197.51 L101.73,198.92 L100.15,199.77 L98.77,197.52 L97.49,202.09 L99.05,202.87 L98.54,205.20 L99.98,206.86 L101.63,209.81 L100.34,212.31 L100.86,214.55 L99.45,217.45 L96.03,218.94 L94.63,221.07 L96.52,222.17 L96.86,223.11 L94.54,224.92 L92.76,224.54 L91.75,225.34 L90.62,223.32 L88.86,223.47 L88.96,222.02 L87.47,221.01 L85.43,220.93 L84.51,219.17 L82.95,219.72 L80.76,215.82 L78.45,213.83 L77.58,212.51 L78.51,211.40 L78.35,209.47 L75.55,208.71 L73.47,207.32 L74.75,204.66 L73.84,203.45 L72.25,202.74 L71.12,205.05 L70.30,204.42 L68.30,204.49 L67.78,202.95 L65.53,202.15 L64.35,203.75 L62.78,201.42 L61.85,201.65 L60.89,200.13 L59.94,200.43 L58.28,198.96 L56.68,200.23 L55.68,199.45 L52.51,200.12 L49.96,199.47 L47.15,200.54 L44.34,199.36 L41.95,195.29 L41.20,191.92 L39.31,189.98 L37.95,187.99 L38.16,185.93 L37.83,183.04 L33.91,183.58 L32.14,182.98 L29.43,179.08 L29.23,177.00 L30.56,174.25 L30.49,169.34 L28.99,168.56 L26.23,168.86 L20.76,166.17 L20.40,165.24 L20.84,161.86 L21.79,159.47 L25.98,155.67 L28.25,153.21 L30.33,148.74 L33.41,145.95 L36.31,145.76 L37.92,147.45 L38.02,148.66 L39.19,150.62 L41.05,150.92 L46.78,148.62 L48.80,148.23 L52.46,148.18 L55.99,146.76 L56.52,144.04 L57.44,142.76 L60.22,140.33 L61.95,135.41 L63.17,133.81 L67.99,131.07 L71.39,129.59 L73.56,126.03 L76.25,121.09 L78.02,114.97 L81.26,113.61 L83.85,112.91 L86.49,110.84Z",
+  "M304.49,159.75 L303.50,159.24 L301.22,159.72 L299.78,160.82 L297.90,160.07 L294.67,159.86 L293.66,158.62 L294.62,155.29 L294.09,154.17 L296.35,149.44 L295.23,146.87 L299.15,146.43 L302.50,144.41 L304.48,144.90 L305.69,145.89 L305.89,151.39 L304.72,153.06 L305.34,155.63 L307.01,156.89 L305.22,158.16 L304.49,159.75Z",
+  "M139.33,301.93 L138.88,301.00 L140.08,298.99 L142.08,297.70 L143.57,293.64 L145.12,293.41 L143.81,291.32 L142.54,290.85 L142.45,289.56 L143.88,287.65 L143.91,285.70 L145.21,285.07 L146.64,286.21 L148.47,286.76 L148.65,283.94 L150.52,283.23 L149.94,279.91 L151.06,279.10 L151.83,277.13 L154.87,277.43 L156.53,278.24 L158.43,278.38 L158.63,280.02 L160.25,280.13 L160.98,281.89 L163.33,283.16 L164.31,280.72 L166.15,281.38 L167.65,282.57 L168.71,281.75 L171.62,280.87 L174.57,283.10 L175.06,284.12 L174.62,287.81 L173.36,288.88 L174.49,290.20 L174.45,294.01 L175.64,294.30 L177.09,295.75 L179.40,295.08 L180.49,297.19 L182.58,296.52 L184.78,298.28 L186.17,300.04 L187.07,302.53 L186.28,303.85 L189.37,305.31 L190.68,309.98 L192.55,308.97 L193.94,309.62 L195.87,309.71 L199.21,309.57 L199.97,308.58 L201.38,308.32 L201.73,309.30 L198.70,311.00 L197.61,313.19 L197.47,315.45 L196.33,316.85 L194.99,316.39 L194.14,317.52 L192.87,317.49 L192.60,318.92 L190.07,319.77 L188.80,319.43 L187.73,322.25 L183.71,320.44 L182.56,321.85 L180.74,323.13 L182.65,323.98 L184.07,323.84 L183.75,326.47 L182.18,326.03 L180.16,324.73 L179.32,322.49 L176.13,323.21 L175.33,324.85 L176.48,325.65 L174.84,328.40 L172.14,327.00 L170.26,328.08 L168.04,328.59 L167.00,329.36 L164.63,329.70 L164.03,330.55 L163.93,334.86 L161.17,334.77 L159.32,335.79 L157.39,338.33 L155.06,337.12 L154.21,337.81 L151.95,337.41 L149.75,338.21 L149.47,339.85 L147.58,341.49 L144.31,340.38 L143.01,340.87 L140.94,340.69 L138.73,339.98 L138.35,336.16 L139.94,333.29 L135.42,332.24 L138.07,329.33 L137.91,324.12 L138.59,322.54 L138.04,320.99 L136.53,320.06 L137.88,316.71 L141.33,314.54 L137.71,313.32 L137.86,311.56 L139.51,310.66 L139.33,309.53 L140.75,306.71 L139.33,301.93Z",
+  "M149.22,390.84 L150.25,392.44 L151.40,393.10 L154.55,390.55 L155.01,387.21 L156.32,385.97 L158.88,385.48 L160.41,385.64 L161.73,386.64 L162.96,386.75 L163.93,384.69 L165.25,385.31 L166.77,383.46 L167.03,381.67 L168.61,381.87 L169.27,382.93 L174.36,381.48 L174.89,379.62 L176.48,378.24 L177.70,379.18 L180.05,380.09 L180.54,382.48 L179.86,384.63 L179.21,390.35 L177.77,395.38 L173.76,401.88 L173.06,403.87 L171.57,404.41 L172.51,406.00 L171.87,409.92 L173.07,413.28 L173.31,419.36 L172.53,419.20 L171.43,420.62 L173.26,421.96 L173.67,430.27 L171.66,430.61 L166.40,429.94 L165.06,430.84 L164.09,432.71 L164.65,434.42 L163.00,436.11 L162.51,437.36 L160.62,439.71 L159.21,443.37 L159.81,444.56 L161.65,446.26 L155.67,447.99 L154.49,448.97 L152.02,449.28 L149.05,451.73 L148.45,452.97 L148.46,455.19 L147.51,456.67 L147.89,459.15 L146.96,461.18 L143.08,463.15 L142.23,464.29 L139.71,464.95 L139.35,465.90 L135.88,465.19 L132.64,462.35 L135.13,458.50 L133.51,455.29 L134.80,453.34 L133.17,450.89 L134.93,448.78 L135.16,446.41 L137.06,443.11 L135.71,441.56 L133.46,441.35 L134.29,439.49 L134.16,437.18 L135.36,431.70 L133.63,429.47 L130.79,431.68 L128.56,430.29 L128.38,428.37 L128.71,425.63 L129.71,422.65 L128.53,421.19 L126.05,420.19 L127.37,417.03 L125.66,415.99 L123.67,415.72 L124.44,414.28 L122.53,412.01 L120.58,411.36 L119.81,409.91 L121.64,409.62 L122.72,408.39 L123.91,407.77 L124.74,409.18 L128.52,409.39 L129.74,406.40 L131.29,406.08 L132.74,406.72 L135.42,406.16 L137.40,406.92 L138.36,404.01 L140.96,403.91 L142.55,401.23 L141.93,400.24 L138.09,399.67 L140.12,397.24 L140.44,395.26 L139.75,394.78 L139.93,392.36 L142.01,392.26 L143.01,390.29 L144.75,388.82 L145.69,390.15 L146.65,389.40 L147.75,390.56 L149.22,390.84Z",
+  "M355.79,202.20 L356.76,206.25 L357.35,207.93 L356.98,210.92 L356.21,213.26 L356.34,214.65 L354.79,214.47 L353.42,215.99 L351.53,215.40 L352.02,218.60 L350.13,219.92 L349.06,221.88 L349.96,224.81 L348.31,226.52 L346.01,226.79 L344.42,222.25 L343.37,223.46 L342.54,222.29 L341.38,218.48 L340.08,216.68 L340.00,214.47 L340.95,214.46 L341.07,212.16 L343.21,208.53 L345.68,209.07 L346.99,208.64 L347.37,207.28 L348.60,206.32 L351.05,208.01 L352.00,204.05 L354.14,204.13 L355.79,202.20Z",
+  "M139.52,107.48 L144.96,110.01 L143.58,112.17 L142.82,112.37 L141.57,116.03 L143.44,119.28 L145.26,118.70 L145.79,121.26 L148.02,119.17 L149.38,118.72 L150.86,117.25 L153.16,118.12 L153.74,120.00 L157.55,122.39 L159.57,122.70 L157.60,124.74 L159.24,127.61 L161.11,127.26 L165.12,130.78 L166.63,131.11 L166.77,132.34 L172.13,131.76 L173.30,132.53 L174.31,134.32 L175.65,134.24 L176.52,132.76 L177.22,132.78 L182.13,135.99 L183.86,135.04 L187.11,137.66 L191.40,139.90 L193.33,140.29 L194.95,142.91 L196.77,143.48 L197.28,144.75 L200.58,146.30 L203.27,148.37 L204.50,147.22 L205.97,147.31 L211.59,151.24 L215.41,150.55 L216.12,152.72 L215.81,154.06 L218.68,154.09 L220.22,154.93 L222.49,154.84 L224.21,156.81 L225.76,155.51 L225.45,154.43 L228.78,154.60 L232.34,156.50 L232.93,157.97 L234.12,158.91 L233.54,160.64 L235.03,161.41 L235.20,163.87 L238.15,165.20 L239.23,167.20 L238.44,168.56 L235.64,167.87 L235.13,169.46 L232.99,169.87 L235.49,172.01 L236.96,172.18 L236.78,174.24 L234.70,175.85 L236.90,177.77 L240.67,179.91 L242.22,180.15 L243.57,181.49 L241.63,183.35 L240.03,182.22 L239.13,183.45 L235.56,184.00 L233.21,185.27 L231.47,187.64 L230.49,187.65 L228.86,188.95 L227.64,189.14 L224.63,191.32 L224.96,192.24 L224.91,196.31 L225.39,197.70 L227.67,200.24 L227.03,201.83 L225.48,202.24 L225.23,205.24 L225.61,206.02 L224.46,208.66 L222.48,211.56 L220.96,212.24 L218.78,212.28 L216.85,210.88 L215.39,208.99 L216.21,205.59 L215.37,204.11 L216.19,199.92 L214.64,199.05 L210.86,199.31 L210.98,200.69 L208.33,199.54 L208.46,198.18 L203.41,195.96 L203.26,194.35 L200.25,193.54 L198.55,191.10 L197.17,192.04 L194.17,191.54 L194.05,193.14 L192.58,194.90 L189.54,195.43 L187.76,195.29 L188.29,193.10 L187.24,191.89 L185.39,193.37 L182.97,192.61 L179.39,193.75 L180.63,191.91 L181.70,191.44 L179.94,189.60 L180.03,188.02 L178.31,187.56 L177.27,188.80 L175.76,188.73 L175.41,189.93 L173.20,190.38 L173.33,192.66 L171.70,191.93 L169.53,192.13 L167.93,192.91 L166.59,192.41 L166.83,190.08 L165.81,188.89 L164.54,189.26 L164.82,191.07 L164.22,192.37 L162.49,191.60 L160.89,190.25 L158.82,191.57 L158.32,188.58 L159.48,185.88 L157.12,186.59 L157.24,188.48 L154.86,187.54 L154.35,190.09 L155.14,194.80 L157.24,196.46 L157.42,200.77 L158.97,200.02 L160.48,203.21 L160.22,204.61 L158.92,206.71 L157.18,206.14 L155.83,206.36 L154.49,204.56 L153.42,203.97 L152.38,205.51 L149.90,203.11 L149.92,199.58 L148.40,196.13 L150.79,194.24 L150.80,192.81 L151.65,191.10 L150.32,188.22 L151.99,185.68 L153.14,184.89 L155.53,185.16 L157.84,184.21 L156.98,182.21 L158.06,181.40 L159.89,177.59 L160.76,176.87 L161.26,173.90 L162.68,172.65 L161.61,170.10 L160.58,168.84 L160.61,167.19 L158.72,166.87 L156.51,165.34 L154.31,166.02 L151.71,164.94 L151.15,164.15 L149.06,164.76 L149.83,163.36 L147.61,162.88 L144.35,163.91 L142.33,163.13 L141.78,164.04 L138.31,165.54 L137.45,164.27 L141.60,162.13 L139.44,161.54 L141.14,158.91 L139.69,156.89 L137.59,155.72 L137.56,154.72 L136.16,153.62 L136.27,151.65 L135.29,149.18 L138.88,147.17 L138.29,145.37 L138.49,141.57 L138.22,139.44 L136.20,137.91 L136.18,136.30 L133.98,132.16 L134.38,129.93 L133.02,128.33 L132.95,123.98 L133.28,122.93 L132.48,120.38 L133.33,118.69 L133.88,115.48 L135.21,113.20 L137.33,112.25 L139.70,107.80 L139.52,107.48Z",
+  "M176.52,132.76 L175.65,134.24 L174.31,134.32 L173.30,132.53 L172.13,131.76 L166.77,132.34 L166.63,131.11 L165.12,130.78 L161.11,127.26 L159.24,127.61 L157.60,124.74 L159.57,122.70 L157.55,122.39 L153.74,120.00 L153.16,118.12 L150.86,117.25 L149.38,118.72 L148.02,119.17 L145.79,121.26 L145.26,118.70 L143.44,119.28 L141.57,116.03 L142.82,112.37 L143.58,112.17 L144.96,110.01 L139.52,107.48 L143.01,105.76 L141.98,104.37 L142.71,103.32 L141.37,101.63 L142.86,100.19 L142.96,98.41 L144.31,95.44 L147.26,94.86 L151.22,93.25 L152.90,94.65 L154.74,94.13 L155.52,94.80 L157.69,94.63 L158.81,96.20 L160.66,96.07 L159.34,93.76 L161.41,90.37 L162.61,90.88 L164.37,93.16 L164.91,95.19 L166.34,96.02 L166.80,97.32 L168.10,97.29 L169.37,98.83 L171.65,97.81 L173.31,98.26 L174.20,99.65 L177.77,100.93 L178.95,102.13 L178.63,104.68 L181.36,105.45 L183.22,106.68 L184.07,106.15 L186.33,107.58 L188.90,110.39 L188.42,111.91 L185.45,114.65 L184.38,114.64 L183.63,116.39 L180.90,117.98 L181.67,119.77 L180.63,121.70 L179.06,122.89 L180.15,125.00 L179.48,127.75 L177.61,128.37 L177.48,129.91 L176.34,131.37 L176.52,132.76Z",
+  "M293.66,158.62 L294.67,159.86 L297.90,160.07 L299.78,160.82 L301.22,159.72 L303.50,159.24 L304.49,159.75 L306.23,160.39 L307.60,163.35 L309.48,163.83 L310.08,165.21 L311.92,165.07 L313.71,164.28 L314.92,165.24 L316.39,165.09 L319.57,166.95 L320.79,166.89 L320.79,172.01 L319.22,173.02 L318.75,175.52 L317.28,175.33 L317.77,177.16 L316.15,178.10 L313.35,178.02 L310.54,175.96 L310.28,173.03 L307.63,170.75 L306.84,171.57 L308.03,173.29 L305.48,174.02 L304.45,172.51 L301.17,170.45 L298.97,168.66 L298.83,170.37 L300.53,170.78 L300.16,172.18 L298.59,173.66 L298.60,174.65 L296.07,175.85 L294.69,179.59 L295.13,181.45 L297.41,181.72 L300.14,183.63 L299.99,184.65 L302.99,186.58 L305.78,186.70 L305.85,188.42 L307.51,190.07 L307.01,191.55 L303.86,190.87 L301.75,191.38 L299.98,191.09 L300.10,193.67 L298.44,195.22 L296.77,194.89 L296.00,196.47 L294.45,197.94 L293.56,199.59 L295.59,202.17 L298.32,204.14 L300.02,204.24 L304.24,205.87 L303.72,207.62 L304.19,211.69 L302.28,213.23 L301.69,216.03 L302.91,216.58 L304.57,219.62 L304.03,222.29 L305.15,222.88 L306.87,222.65 L307.58,223.29 L306.23,224.80 L306.28,226.27 L307.67,228.87 L306.96,230.17 L307.55,231.31 L307.23,233.25 L306.22,233.63 L305.88,236.16 L305.20,237.77 L303.46,239.02 L302.54,240.65 L302.23,242.80 L299.59,243.89 L296.61,246.18 L295.67,243.05 L294.19,242.23 L293.12,244.68 L290.31,247.29 L285.77,248.68 L285.20,246.23 L282.53,245.38 L282.12,243.13 L279.11,244.56 L279.17,242.57 L278.03,241.06 L276.19,240.87 L274.58,238.94 L275.71,238.97 L276.98,237.67 L275.12,233.21 L273.53,233.15 L273.03,231.58 L271.39,231.13 L270.05,229.93 L270.30,227.57 L268.32,226.13 L267.05,226.47 L264.46,224.04 L262.66,224.26 L261.36,222.12 L262.12,221.15 L261.94,218.79 L264.61,218.42 L267.50,219.61 L269.40,218.60 L269.20,217.63 L270.40,216.24 L271.71,216.25 L274.15,215.19 L275.60,215.31 L276.02,213.32 L277.11,212.22 L280.49,213.58 L283.00,211.92 L282.17,209.63 L285.78,210.07 L285.94,208.44 L288.83,207.88 L288.06,206.89 L289.81,205.42 L290.60,203.76 L290.55,201.54 L291.74,201.26 L291.77,196.60 L293.01,195.90 L291.59,193.79 L290.11,192.77 L290.27,190.70 L291.29,189.78 L289.85,187.73 L293.72,184.81 L294.12,183.15 L291.91,181.88 L292.09,180.56 L290.79,180.25 L291.08,177.47 L292.94,176.88 L295.54,174.13 L297.71,172.50 L296.74,170.54 L294.97,169.59 L295.81,167.97 L296.21,165.80 L295.43,162.37 L293.32,160.44 L293.66,158.62Z",
+  "M295.43,244.40 L295.92,246.53 L295.02,248.40 L293.95,247.61 L295.43,244.40Z"
+];
+
+function project(lat: number, lng: number, w: number, h: number) {
+  // Use exact bounds used for GeoJSON conversion
+  const x = ((lng - 68.1) / (97.4 - 68.1)) * w;
+  const y = h - ((lat - 6.7) / (37.1 - 6.7)) * h;
+  return { x, y };
+}
+
+function LocationHeatmap({ data, height = 240 }: { data: ValuationResult[]; height?: number }) {
+  const cityCount: Record<string, number> = {};
+  const cityRisk: Record<string, number> = {};
+  data.forEach(v => {
+    const city = (v.propertySnapshot?.city || '').toLowerCase();
+    cityCount[city] = (cityCount[city] || 0) + 1;
+    if (v.overallRiskLabel === 'high_risk') cityRisk[city] = (cityRisk[city] || 0) + 1;
+  });
+
+  const maxCount = Math.max(...Object.values(cityCount), 1);
+  const W = 432; const H = 488; // Target coordinate system
+
+  const cities = Object.entries(cityCount)
+    .map(([city, count]) => {
+      const coords = CITY_DATA[city];
+      if (!coords) return null;
+      const pos = project(coords.lat, coords.lng, W, H);
+      return { ...pos, label: coords.label, count, riskCount: cityRisk[city] || 0 };
+    })
+    .filter(Boolean) as { x: number; y: number; label: string; count: number; riskCount: number }[];
+
+  if (data.length === 0) {
+    return <div style={{ height }} className="flex items-center justify-center text-gray-300 text-xs">No location data yet</div>;
+  }
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay, duration: 0.4 }}
-      className="bg-white rounded-2xl border border-gray-100 p-5 flex flex-col gap-3 hover:shadow-md transition-shadow"
-    >
-      <div className="flex items-center justify-between">
-        <div className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center`}>
-          <Icon style={{ width: 18, height: 18 }} className={iconColor} />
-        </div>
-        {trend && (
-          <span className={`flex items-center gap-0.5 text-[11px] font-semibold px-2 py-0.5 rounded-full ${
-            trend === 'up' ? 'text-emerald-600 bg-emerald-50' : 'text-red-500 bg-red-50'
-          }`}>
-            {trend === 'up' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            {trendLabel}
-          </span>
-        )}
-      </div>
-      <div>
-        <p className="text-3xl font-extrabold text-gray-900 tracking-tight leading-none">{value}</p>
-        <p className="text-sm font-medium text-gray-500 mt-1.5">{label}</p>
-        <p className="text-xs text-gray-400 mt-0.5">{sub}</p>
-      </div>
-    </motion.div>
+    <svg width="100%" height={height} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
+      {/* High-fidelity State Paths */}
+      <g>
+        {INDIA_PATHS.map((path, i) => (
+          <path
+            key={i}
+            d={path}
+            fill="#F1F5F9"
+            stroke="#CBD5E1"
+            strokeWidth="0.8"
+          />
+        ))}
+      </g>
+      
+      {/* Rendering the cities based on high-fidelity projection */}
+      {cities.map(c => {
+        const r = 10 + (c.count / maxCount) * 18;
+        const hasRisk = c.riskCount > 0;
+        const color = hasRisk ? '#EF4444' : '#3B82F6';
+        const opacity = 0.6 + (c.count / maxCount) * 0.4;
+        return (
+          <g key={c.label}>
+            {/* Outer Glow */}
+            <motion.circle
+              initial={{ r: 0, opacity: 0 }}
+              animate={{ r: r + 12, opacity: 0.1 }}
+              cx={c.x} cy={c.y} fill={color}
+            />
+            {/* Core Circle */}
+            <motion.circle
+              initial={{ r: 0, opacity: 0 }}
+              animate={{ r: r, opacity }}
+              cx={c.x} cy={c.y} fill={color}
+              stroke="white"
+              strokeWidth="2"
+            />
+            {/* Count Label */}
+            {r > 12 && (
+              <text x={c.x} y={c.y + 5} textAnchor="middle" fontSize={14} fontWeight="900" fill="white" className="pointer-events-none">
+                {c.count}
+              </text>
+            )}
+            {/* City Label */}
+            <text x={c.x} y={c.y + r + 16} textAnchor="middle" fontSize={12} fontWeight="700" fill="#334155" className="pointer-events-none" style={{ paintOrder: 'stroke', stroke: 'white', strokeWidth: 3 }}>
+              {c.label}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
   );
 }
 
@@ -337,6 +335,8 @@ function KpiCard({
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [filterRisk, setFilterRisk] = useState('All');
+  const [filterType, setFilterType] = useState('All');
 
   const { data, isLoading } = useQuery({
     queryKey: ['history-dashboard'],
@@ -345,7 +345,6 @@ export default function Dashboard() {
 
   const all: ValuationResult[] = data?.data || [];
   const stats = data?.stats || {};
-  const recent = all.slice(0, 5);
 
   const total = stats.total ?? all.length ?? 0;
   const avgConf = stats.avgConfidence || 0;
@@ -353,140 +352,177 @@ export default function Dashboard() {
   const cautionCount = all.filter(v => v.overallRiskLabel === 'caution').length;
   const highRiskCount = all.filter(v => v.overallRiskLabel === 'high_risk').length;
   const overpricedCount = all.filter(v => v.overPricedFlag).length;
-  const avgMarketValue = all.length
-    ? Math.round(all.reduce((s, v) => s + (v.marketValue || 0), 0) / all.length)
-    : 0;
+  const avgMarketValue = all.length ? Math.round(all.reduce((s, v) => s + (v.marketValue || 0), 0) / all.length) : 0;
   const avgProcessing = stats.avgProcessingTime || 0;
+  const totalPortfolioValue = all.reduce((s, v) => s + (v.marketValue || 0), 0);
+  const totalDistressValue = all.reduce((s, v) => s + (v.distressValue || 0), 0);
+  const locationCount = new Set(all.map(v => (v.propertySnapshot?.city || '').toLowerCase()).filter(Boolean)).size;
 
   const monthlyTrend = buildMonthlyTrend(all);
   const confBuckets = buildConfidenceBuckets(all);
   const ogiveData = buildOgive(all);
-
   const riskDist = [
     { name: 'Safe', value: safeCount, color: '#10b981' },
     { name: 'Caution', value: cautionCount, color: '#f59e0b' },
     { name: 'High Risk', value: highRiskCount, color: '#ef4444' },
   ];
-
   const barData: BarItem[] = confBuckets.map(b => ({ label: b.label, value: b.count, color: b.color }));
   const trendData: LinePoint[] = monthlyTrend.map(m => ({ label: m.month, value: m.count, value2: m.avgConf }));
 
+  const filteredRecent = all.slice(0, 8).filter(v => {
+    const riskOk = filterRisk === 'All' || v.overallRiskLabel === filterRisk.toLowerCase().replace(' ', '_');
+    const typeOk = filterType === 'All' || v.propertySnapshot?.propertyType === filterType.toLowerCase();
+    return riskOk && typeOk;
+  });
+
   return (
-    <div className="min-h-screen bg-[#f8f9fb] p-6 pb-12">
-      <div className="max-w-6xl mx-auto space-y-7">
+    <div className="min-h-screen bg-[#F4F6FA]">
 
-        {/* HEADER */}
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-xs font-semibold text-[#111] uppercase tracking-widest mb-1">Overview</p>
-            <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
-              Welcome back, {user?.name?.split(' ')[0] || 'there'} 👋
-            </h1>
-            <p className="text-sm text-gray-400 mt-1">
-              {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-              {' · '}<span className="text-[#111] font-medium">{total} valuations</span> in portfolio
-            </p>
+      {/* ══ HEADER — matches sidebar theme ══════════════════ */}
+      <div className="bg-[#FDFDFD] border-b border-[#E5E5E5] px-8 pt-6 pb-5">
+        <div className="max-w-7xl mx-auto">
+          {/* Title row */}
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1">Overview</p>
+              <h1 className="text-[22px] font-black text-[#111] leading-tight tracking-tight">
+                Collateral Valuation Portfolio
+              </h1>
+              <p className="text-xs text-gray-400 mt-1">
+                Welcome back, <span className="font-semibold text-gray-600">{user?.name?.split(' ')[0] || 'there'}</span>
+                {' · '}Last refreshed:{' '}
+                {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} at{' '}
+                {new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+              </p>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <button className="flex items-center gap-1.5 px-3.5 py-2 bg-white border border-[#E5E5E5] text-gray-600 text-xs font-semibold rounded-xl hover:bg-gray-50 transition-colors">
+                <RefreshCw className="w-3.5 h-3.5" /> Refresh
+              </button>
+              <button
+                onClick={() => navigate('/app/new-applicant')}
+                className="flex items-center gap-1.5 px-4 py-2 bg-[#111] hover:bg-black text-white text-xs font-bold rounded-xl transition-colors shadow-sm"
+              >
+                + New Application
+              </button>
+            </div>
           </div>
-          <button
-            onClick={() => navigate('/app/new-applicant')}
-            className="flex items-center gap-2 px-5 py-2.5 bg-[#111] hover:bg-black text-white text-sm font-semibold rounded-xl transition-colors shadow-sm shadow-gray-200"
-          >
-            + New Valuation
-          </button>
-        </div>
 
-        {/* TOP KPI CARDS */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KpiCard label="Total Valuations" value={isLoading ? '—' : total} sub="All time submissions"
-            icon={BarChart3} iconColor="text-[#111]" iconBg="bg-gray-50" delay={0} />
-          <KpiCard label="Avg Confidence Score" value={isLoading ? '—' : `${avgConf}%`} sub="Engine model accuracy"
-            icon={Shield} iconColor="text-emerald-600" iconBg="bg-emerald-50" trend="up" trendLabel="Good" delay={0.06} />
-          <KpiCard label="Avg Market Value" value={isLoading ? '—' : formatCurrencyShort(avgMarketValue)} sub="Across all properties"
-            icon={TrendingUp} iconColor="text-violet-600" iconBg="bg-violet-50" trend="up" trendLabel="Rising" delay={0.12} />
-          <KpiCard label="Avg Processing Time" value={isLoading ? '—' : `${avgProcessing}ms`} sub="Engine latency"
-            icon={Zap} iconColor="text-sky-600" iconBg="bg-sky-50" delay={0.18} />
-        </div>
-
-        {/* RISK STRIP */}
-        <div className="grid grid-cols-3 gap-4">
-          {[
-            { label: 'Safe Cases', value: safeCount, color: '#10b981', bg: 'bg-emerald-50', border: 'border-emerald-100', icon: CheckCircle2, iconCls: 'text-emerald-600' },
-            { label: 'Caution Cases', value: cautionCount, color: '#f59e0b', bg: 'bg-amber-50', border: 'border-amber-100', icon: AlertTriangle, iconCls: 'text-amber-600' },
-            { label: 'High Risk Cases', value: highRiskCount, color: '#ef4444', bg: 'bg-red-50', border: 'border-red-100', icon: XCircle, iconCls: 'text-red-500' },
-          ].map((r, i) => (
-            <motion.div key={r.label}
-              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.07 }}
-              className={`bg-white rounded-2xl border ${r.border} p-5`}>
-              <div className="flex items-center justify-between mb-4">
-                <div className={`w-9 h-9 rounded-xl ${r.bg} flex items-center justify-center`}>
-                  <r.icon style={{ width: 17, height: 17 }} className={r.iconCls} />
+          {/* Filter bar */}
+          <div className="flex items-end gap-3 flex-wrap">
+            {[
+              { label: 'Property Type', options: ['All', 'Residential', 'Commercial', 'Industrial', 'Land'], value: filterType, set: setFilterType },
+              { label: 'Risk Tier', options: ['All', 'Safe', 'Caution', 'High Risk'], value: filterRisk, set: setFilterRisk },
+            ].map(f => (
+              <div key={f.label} className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{f.label}</label>
+                <div className="relative">
+                  <select
+                    value={f.value}
+                    onChange={e => f.set(e.target.value)}
+                    className="appearance-none bg-white border border-[#E5E5E5] text-gray-700 text-xs font-semibold rounded-xl px-3 py-2 pr-7 focus:outline-none focus:border-gray-400 min-w-[140px] cursor-pointer"
+                  >
+                    {f.options.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
                 </div>
-                <span className="text-xs text-gray-400 font-medium">{pct(r.value, total)}% of total</span>
               </div>
-              <p className="text-4xl font-extrabold text-gray-900 tracking-tight">{isLoading ? '—' : r.value}</p>
-              <p className="text-sm font-medium text-gray-500 mt-1.5">{r.label}</p>
-              <div className="mt-3"><ProgressBar value={r.value} max={total} color={r.color} /></div>
+            ))}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">City</label>
+              <div className="relative">
+                <select className="appearance-none bg-white border border-[#E5E5E5] text-gray-700 text-xs font-semibold rounded-xl px-3 py-2 pr-7 focus:outline-none focus:border-gray-400 min-w-[140px] cursor-pointer">
+                  <option>All Cities</option>
+                </select>
+                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ══ KPI STRIP ════════════════════════════════════════ */}
+      <div className="max-w-7xl mx-auto px-8">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 py-5">
+          {[
+            { label: 'Total Valuations', value: isLoading ? '—' : String(total), sub: 'All time', borderColor: 'border-l-blue-500', icon: BarChart3, iconColor: 'text-blue-500' },
+            { label: 'Portfolio Value', value: isLoading ? '—' : formatCurrencyShort(totalPortfolioValue), sub: 'Total market value', borderColor: 'border-l-emerald-500', icon: TrendingUp, iconColor: 'text-emerald-500' },
+            { label: 'Distress Exposure', value: isLoading ? '—' : formatCurrencyShort(totalDistressValue), sub: 'Forced-sale value', borderColor: 'border-l-amber-500', icon: AlertTriangle, iconColor: 'text-amber-500' },
+            { label: 'High Risk Cases', value: isLoading ? '—' : String(highRiskCount), sub: `${pct(highRiskCount, total)}% of portfolio`, borderColor: 'border-l-red-500', icon: XCircle, iconColor: 'text-red-500' },
+          ].map((k, i) => (
+            <motion.div key={k.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}
+              className={`bg-white rounded-xl border border-gray-100 border-l-4 ${k.borderColor} px-5 py-4 shadow-sm`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-gray-500">{k.label}</span>
+                <k.icon style={{ width: 15, height: 15 }} className={k.iconColor} />
+              </div>
+              <p className="text-2xl font-black text-gray-900 tracking-tight leading-none">{k.value}</p>
+              <p className="text-[11px] text-gray-400 mt-1">{k.sub}</p>
             </motion.div>
           ))}
         </div>
+      </div>
 
-        {/* CHARTS ROW 1 — Full-width trend */}
-        <div className="bg-white rounded-2xl border border-gray-100 p-5">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h2 className="text-sm font-bold text-gray-800">Monthly Valuation Trend</h2>
-              <p className="text-xs text-gray-400 mt-0.5">Submissions (solid) vs Avg Confidence % (dashed)</p>
+      {/* ══ CHARTS + TABLE ═══════════════════════════════════ */}
+      <div className="max-w-7xl mx-auto px-8 pb-10 space-y-5">
+
+        {/* Row 1: Confidence Ogive + Donut */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div className="lg:col-span-2 bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div><h3 className="text-sm font-bold text-gray-800">Confidence Ogive</h3><p className="text-[11px] text-gray-400 mt-0.5">Cumulative S-curve</p></div>
+              <span className="text-[9px] bg-gray-50 text-gray-600 font-bold px-1.5 py-0.5 rounded border border-gray-100">S-CURVE</span>
             </div>
-            <span className="text-xs bg-gray-50 text-[#111] font-semibold px-2.5 py-1 rounded-lg">Last 8 months</span>
+            <div className="h-56">{isLoading || all.length === 0 ? <div className="h-full flex items-center justify-center text-gray-300 text-sm">{isLoading ? 'Loading…' : 'No data yet'}</div> : <OgiveSVG data={ogiveData} total={all.length} height={224} />}</div>
           </div>
-          <div className="h-40">
-            {isLoading ? (
-              <div className="h-full flex items-center justify-center text-gray-300 text-sm">Loading…</div>
-            ) : trendData.length < 2 ? (
-              <div className="h-full flex items-center justify-center text-gray-300 text-sm">No data yet</div>
-            ) : (
-              <AreaChartSVG data={trendData} color1="#111111" color2="#10b981" height={160} />
-            )}
-          </div>
-          <div className="flex items-center gap-5 mt-2">
-            <span className="flex items-center gap-1.5 text-xs text-gray-500">
-              <span className="w-4 h-0.5 bg-gray-500 inline-block rounded" /> Valuations
-            </span>
-            <span className="flex items-center gap-1.5 text-xs text-gray-500">
-              <span className="w-4 border-t border-dashed border-emerald-500 inline-block" /> Avg Confidence
-            </span>
+
+          {/* Location Heatmap - Moved to Row 1 */}
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 flex flex-col">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="text-sm font-bold text-gray-800">Duplicate Incidents by Location</h3>
+                <p className="text-[11px] text-gray-400 mt-0.5">Bubble size = number of valuations</p>
+              </div>
+              <MapPin className="w-3.5 h-3.5 text-gray-300" />
+            </div>
+            <div className="bg-slate-50 rounded-2xl p-4 flex-1 flex items-center justify-center min-h-[300px] overflow-hidden relative">
+              <div className="absolute inset-0 opacity-40 bg-[radial-gradient(#CBD5E1_1px,transparent_1px)] [background-size:20px_20px]" />
+              <div className="relative w-full h-full flex items-center justify-center">
+                <LocationHeatmap data={all} height={280} />
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-4 text-[11px] text-gray-500 shrink-0">
+              <span className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" /> Normal
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" /> High risk
+              </span>
+              <span className="ml-auto font-medium text-gray-600">{all.length} incidents</span>
+            </div>
           </div>
         </div>
 
-        {/* CHARTS ROW 2 — Risk Distribution | Confidence Histogram | Ogive side by side */}
-        <div className="grid grid-cols-3 gap-4">
+        {/* Row 2: Heatmap + Confidence Distribution + Metrics */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-          {/* Risk Distribution */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-5">
-            <h2 className="text-sm font-bold text-gray-800">Risk Distribution</h2>
-            <p className="text-xs text-gray-400 mt-0.5 mb-3">Portfolio breakdown</p>
+          {/* Risk Distribution - Moved to Row 2 */}
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <h3 className="text-sm font-bold text-gray-800">Risk Distribution</h3>
+            <p className="text-[11px] text-gray-400 mb-3">Portfolio breakdown</p>
             {isLoading || all.length === 0 ? (
-              <div className="h-36 flex items-center justify-center text-gray-300 text-sm">
-                {isLoading ? 'Loading…' : 'No data yet'}
-              </div>
+              <div className="h-40 flex items-center justify-center text-gray-300 text-sm">{isLoading ? 'Loading…' : 'No data yet'}</div>
             ) : (
               <>
-                <div className="flex justify-center mb-3">
-                  <DonutChart data={riskDist} size={110} centerLabel={String(total)} centerSub="total" />
-                </div>
-                <div className="space-y-2.5">
+                <div className="flex justify-center mb-3"><DonutChart data={riskDist} size={110} centerLabel={String(total)} centerSub="total" /></div>
+                <div className="space-y-2">
                   {riskDist.map(r => (
-                    <div key={r.name}>
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: r.color }} />
-                          <span className="text-xs font-medium text-gray-600">{r.name}</span>
-                        </div>
-                        <span className="text-xs font-bold text-gray-800">
-                          {r.value} <span className="text-gray-400 font-normal">({pct(r.value, total)}%)</span>
-                        </span>
+                    <div key={r.name} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: r.color }} /><span className="text-xs text-gray-600">{r.name}</span></div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden"><motion.div className="h-full rounded-full" style={{ background: r.color }} initial={{ width: 0 }} animate={{ width: `${pct(r.value, total)}%` }} transition={{ duration: 0.8 }} /></div>
+                        <span className="text-xs font-bold text-gray-800 w-5 text-right">{r.value}</span>
                       </div>
-                      <ProgressBar value={r.value} max={total} color={r.color} />
                     </div>
                   ))}
                 </div>
@@ -494,171 +530,73 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* Confidence Distribution */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-5">
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <h2 className="text-sm font-bold text-gray-800">Confidence Distribution</h2>
-                <p className="text-xs text-gray-400 mt-0.5">Cases per score band</p>
-              </div>
-              <Activity className="w-3.5 h-3.5 text-gray-300 mt-0.5" />
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div><h3 className="text-sm font-bold text-gray-800">Confidence Distribution</h3><p className="text-[11px] text-gray-400 mt-0.5">Cases per score band</p></div>
+              <Activity className="w-3.5 h-3.5 text-gray-300" />
             </div>
-            <div className="h-40">
-              {isLoading ? (
-                <div className="h-full flex items-center justify-center text-gray-300 text-sm">Loading…</div>
-              ) : all.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-gray-300 text-sm">No data yet</div>
-              ) : (
-                <BarChartSVG data={barData} height={160} />
-              )}
-            </div>
-            <div className="flex flex-wrap gap-2 mt-2">
-              {confBuckets.map(b => (
-                <span key={b.range} className="flex items-center gap-1 text-[10px] text-gray-500">
-                  <span className="w-2 h-2 rounded-sm inline-block" style={{ background: b.color }} />
-                  {b.range}
-                </span>
-              ))}
-            </div>
+            <div className="h-40">{isLoading || all.length === 0 ? <div className="h-full flex items-center justify-center text-gray-300 text-sm">{isLoading ? 'Loading…' : 'No data yet'}</div> : <BarChartSVG data={barData} height={160} />}</div>
+            <div className="flex flex-wrap gap-2 mt-2">{confBuckets.map(b => (<span key={b.range} className="flex items-center gap-1 text-[10px] text-gray-400"><span className="w-2 h-2 rounded-sm inline-block" style={{ background: b.color }} />{b.range}</span>))}</div>
           </div>
 
-          {/* Confidence Ogive */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-5">
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <h2 className="text-sm font-bold text-gray-800">Confidence Ogive</h2>
-                <p className="text-xs text-gray-400 mt-0.5">Cumulative frequency S-curve</p>
-              </div>
-              <span className="text-[9px] bg-gray-50 text-[#111] font-bold px-1.5 py-0.5 rounded">S-CURVE</span>
-            </div>
-            <div className="h-40">
-              {isLoading ? (
-                <div className="h-full flex items-center justify-center text-gray-300 text-sm">Loading…</div>
-              ) : all.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-gray-300 text-sm">No data yet</div>
-              ) : (
-                <OgiveSVG data={ogiveData} total={all.length} height={160} />
-              )}
-            </div>
-            <div className="flex items-center gap-3 mt-2">
-              <span className="flex items-center gap-1 text-[10px] text-gray-500">
-                <span className="w-3 h-0.5 bg-gray-500 inline-block rounded" /> Cum. %
-              </span>
-              <span className="flex items-center gap-1 text-[10px] text-gray-500">
-                <span className="w-3 border-t border-dashed border-gray-900 inline-block" /> P50
-              </span>
-            </div>
+          <div className="space-y-3">
+            {[
+              { label: 'Avg Confidence', value: `${avgConf}%`, sub: 'Model accuracy', icon: Shield, color: '#10b981', bg: 'bg-emerald-50' },
+              { label: 'Avg Market Value', value: formatCurrencyShort(avgMarketValue), sub: 'Per property', icon: TrendingUp, color: '#3b82f6', bg: 'bg-blue-50' },
+              { label: 'Overpriced Flags', value: String(overpricedCount), sub: `${pct(overpricedCount, total)}% flagged`, icon: XCircle, color: '#f59e0b', bg: 'bg-amber-50' },
+              { label: 'Avg Processing', value: `${avgProcessing}ms`, sub: 'Engine latency', icon: Zap, color: '#8b5cf6', bg: 'bg-violet-50' },
+            ].map((s, i) => (
+              <motion.div key={s.label} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 + i * 0.05 }}
+                className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 flex items-center gap-3">
+                <div className={`w-8 h-8 rounded-lg ${s.bg} flex items-center justify-center shrink-0`}><s.icon style={{ width: 15, height: 15, color: s.color }} /></div>
+                <div className="flex-1 min-w-0"><p className="text-xs text-gray-500 truncate">{s.label}</p><p className="text-[10px] text-gray-400 truncate">{s.sub}</p></div>
+                <p className="text-base font-black text-gray-900 shrink-0">{isLoading ? '—' : s.value}</p>
+              </motion.div>
+            ))}
           </div>
         </div>
 
-        {/* SECONDARY METRICS — compact inline strip */}
-        <div className="grid grid-cols-4 gap-3">
-          {[
-            { label: 'Overpriced Flags', value: overpricedCount, sub: `${pct(overpricedCount, total)}% flagged`, icon: XCircle, iconColor: 'text-amber-500', iconBg: 'bg-amber-50', border: 'border-amber-100' },
-            { label: 'Caution Cases', value: cautionCount, sub: `${pct(cautionCount, total)}% of total`, icon: AlertTriangle, iconColor: 'text-amber-600', iconBg: 'bg-amber-50', border: 'border-amber-100' },
-            { label: 'Reports Generated', value: total, sub: 'Full valuation reports', icon: FileText, iconColor: 'text-[#111]', iconBg: 'bg-gray-50', border: 'border-gray-200' },
-            { label: 'Avg Processing', value: `${avgProcessing}ms`, sub: 'Engine response time', icon: Clock, iconColor: 'text-sky-600', iconBg: 'bg-sky-50', border: 'border-sky-100' },
-          ].map((s, i) => (
-            <motion.div key={s.label}
-              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 + i * 0.05 }}
-              className={`bg-white rounded-xl border ${s.border} px-4 py-3.5 flex items-center gap-3`}>
-              <div className={`w-8 h-8 rounded-lg ${s.iconBg} flex items-center justify-center shrink-0`}>
-                <s.icon style={{ width: 15, height: 15 }} className={s.iconColor} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-lg font-extrabold text-gray-900 leading-none">{isLoading ? '—' : s.value}</p>
-                <p className="text-[11px] font-medium text-gray-500 mt-0.5 truncate">{s.label}</p>
-                <p className="text-[10px] text-gray-400 truncate">{s.sub}</p>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-
-        {/* RECENT VALUATIONS */}
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+        {/* Row 3: Recent Valuations table */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-gray-50 flex items-center justify-center">
-                <TrendingUp className="w-4 h-4 text-[#111]" />
-              </div>
-              <div>
-                <h2 className="text-sm font-bold text-gray-800">Recent Valuations</h2>
-                <p className="text-xs text-gray-400">Latest 5 submissions</p>
-              </div>
-            </div>
-            <button
-              onClick={() => navigate('/app/history')}
-              className="flex items-center gap-1.5 text-xs font-semibold text-[#111] hover:text-black bg-gray-50 hover:bg-gray-100 px-3 py-1.5 rounded-lg transition-colors"
-            >
-              View all <ArrowRight className="w-3 h-3" />
+            <div><h3 className="text-sm font-bold text-gray-800">Recent Valuations</h3><p className="text-[11px] text-gray-400 mt-0.5">Latest submissions · click to view full report</p></div>
+            <button onClick={() => navigate('/app/history')} className="flex items-center gap-1.5 text-xs font-semibold text-[#1C2333] bg-gray-50 hover:bg-gray-100 border border-gray-200 px-3 py-1.5 rounded-lg transition-colors">
+              View All <ArrowRight className="w-3 h-3" />
             </button>
+          </div>
+
+          {/* Table header */}
+          <div className="grid grid-cols-12 gap-3 px-6 py-2.5 bg-[#F8F9FB] border-b border-gray-100">
+            {[['Asset ID', 1], ['Property', 2], ['Location', 2], ['Market Value', 2], ['Distress Value', 2], ['Risk', 1], ['Conf.', 1], ['Date', 1]].map(([h, span]) => (
+              <span key={h as string} className={`col-span-${span} text-[10px] font-bold text-gray-400 uppercase tracking-wide`}>{h}</span>
+            ))}
           </div>
 
           {isLoading ? (
             <div className="py-12 text-center text-gray-400 text-sm">Loading…</div>
-          ) : recent.length === 0 ? (
+          ) : filteredRecent.length === 0 ? (
             <div className="py-12 text-center">
               <Building2 className="w-10 h-10 text-gray-200 mx-auto mb-3" />
-              <p className="text-sm font-medium text-gray-400">No valuations yet</p>
-              <button onClick={() => navigate('/app/new-applicant')} className="mt-3 text-xs text-[#111] hover:underline font-medium">
-                + Add your first applicant
-              </button>
+              <p className="text-sm text-gray-400">No valuations yet</p>
+              <button onClick={() => navigate('/app/new-applicant')} className="mt-3 text-xs text-blue-600 hover:underline font-medium">+ Add your first applicant</button>
             </div>
           ) : (
-            <>
-              <div className="grid grid-cols-12 gap-4 px-6 py-2.5 bg-gray-50 border-b border-gray-100">
-                <span className="col-span-4 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Property</span>
-                <span className="col-span-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Value Range</span>
-                <span className="col-span-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Risk</span>
-                <span className="col-span-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Confidence</span>
-                <span className="col-span-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Date</span>
-              </div>
-              <div className="divide-y divide-gray-50">
-                {recent.map((v, i) => (
-                  <motion.div key={v._id}
-                    initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
-                    onClick={() => navigate(`/app/dashboard/${v._id}`)}
-                    className="grid grid-cols-12 gap-4 items-center px-6 py-4 hover:bg-gray-50 cursor-pointer transition-colors">
-                    <div className="col-span-4 flex items-center gap-3 min-w-0">
-                      <div className="w-9 h-9 rounded-xl bg-gray-50 flex items-center justify-center shrink-0">
-                        <Building2 className="w-4 h-4 text-[#111]" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-gray-800 capitalize truncate">
-                          {v.propertySnapshot?.propertyType}
-                          <span className="text-gray-400 font-normal"> · {v.propertySnapshot?.area?.toLocaleString('en-IN')} sqft</span>
-                        </p>
-                        <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5 truncate">
-                          <MapPin className="w-3 h-3 shrink-0" />
-                          {v.propertySnapshot?.locality}, {v.propertySnapshot?.city}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="col-span-3">
-                      <p className="text-sm font-bold text-gray-800">
-                        {formatCurrencyShort(v.valueRangeLow)} – {formatCurrencyShort(v.valueRangeHigh)}
-                      </p>
-                      <p className="text-xs text-gray-400 mt-0.5">Market: {formatCurrencyShort(v.marketValue)}</p>
-                    </div>
-                    <div className="col-span-2">
-                      <Badge variant={v.overallRiskLabel}>
-                        {v.overallRiskLabel?.replace('_', ' ').toUpperCase()}
-                      </Badge>
-                    </div>
-                    <div className="col-span-2">
-                      <p className={`text-sm font-extrabold ${getRiskColor(v.overallRiskLabel)}`}>{v.confidenceScore}%</p>
-                      <div className="mt-1 w-16">
-                        <ProgressBar value={v.confidenceScore} max={100}
-                          color={v.overallRiskLabel === 'safe' ? '#10b981' : v.overallRiskLabel === 'caution' ? '#f59e0b' : '#ef4444'} />
-                      </div>
-                    </div>
-                    <div className="col-span-1">
-                      <p className="text-xs text-gray-400 whitespace-nowrap">{formatDate(v.createdAt).split(',')[0]}</p>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </>
+            <div className="divide-y divide-gray-50">
+              {filteredRecent.map((v, i) => (
+                <motion.div key={v._id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
+                  onClick={() => navigate(`/app/dashboard/${v._id}`)}
+                  className="grid grid-cols-12 gap-3 items-center px-6 py-3.5 hover:bg-[#F8F9FB] cursor-pointer transition-colors group">
+                  <div className="col-span-1"><span className="text-xs font-bold text-blue-600 group-hover:underline">#{v._id?.slice(-5).toUpperCase()}</span></div>
+                  <div className="col-span-2 min-w-0"><p className="text-xs font-semibold text-gray-800 capitalize truncate">{v.propertySnapshot?.propertyType}</p><p className="text-[10px] text-gray-400 truncate">{v.propertySnapshot?.area?.toLocaleString('en-IN')} sqft</p></div>
+                  <div className="col-span-2 min-w-0"><p className="text-xs text-gray-700 truncate flex items-center gap-1"><MapPin className="w-3 h-3 text-gray-400 shrink-0" />{v.propertySnapshot?.locality}</p><p className="text-[10px] text-gray-400 truncate pl-4">{v.propertySnapshot?.city}</p></div>
+                  <div className="col-span-2"><p className="text-xs font-bold text-gray-800">{formatCurrencyShort(v.marketValue)}</p><p className="text-[10px] text-gray-400">{formatCurrencyShort(v.valueRangeLow)}–{formatCurrencyShort(v.valueRangeHigh)}</p></div>
+                  <div className="col-span-2"><p className="text-xs font-semibold text-gray-700">{formatCurrencyShort(v.distressValue)}</p><p className="text-[10px] text-gray-400">{((v.distressMultiplier || 0) * 100).toFixed(0)}% of market</p></div>
+                  <div className="col-span-1"><Badge variant={v.overallRiskLabel}>{v.overallRiskLabel?.replace('_', ' ')}</Badge></div>
+                  <div className="col-span-1"><p className={`text-xs font-extrabold ${getRiskColor(v.overallRiskLabel)}`}>{v.confidenceScore}%</p></div>
+                  <div className="col-span-1"><p className="text-[10px] text-gray-400 whitespace-nowrap">{new Date(v.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</p></div>
+                </motion.div>
+              ))}
+            </div>
           )}
         </div>
 

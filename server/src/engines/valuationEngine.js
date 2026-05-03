@@ -270,7 +270,8 @@ function costApproach(property, marketData, depreciationResult) {
   // Land value: typically 40–60% of total property value in urban India
   // We use circle rate as a proxy for land value (government assessed)
   const landValueRatio = property.propertyType === 'land' ? 1.0 : 0.45;
-  const landValue = marketData.circleRate * property.area * landValueRatio;
+  const circleRate = marketData.circleRate || 4000; // Fallback circle rate
+  const landValue = circleRate * property.area * landValueRatio;
 
   // CPWD replacement cost benchmarks (₹/sqft, 2023-24)
   const cpwdCost = {
@@ -282,7 +283,8 @@ function costApproach(property, marketData, depreciationResult) {
   const replacementCost = replacementCostPerSqft * property.area;
 
   // Apply NHB depreciation
-  const depreciatedStructureValue = replacementCost * depreciationResult.factor;
+  const depreciationFactor = depreciationResult.factor || 0.8; // Fallback
+  const depreciatedStructureValue = replacementCost * depreciationFactor;
 
   const totalCostValue = Math.round(landValue + depreciatedStructureValue);
   return totalCostValue;
@@ -375,7 +377,8 @@ function run(property, marketData, comparables = []) {
 
   // Use sales comp if available, else market-based as proxy
   const salesValue = salesCompValue || marketBasedValue;
-  const marketValue = Math.round(salesValue * weights.sales + costValue * weights.cost);
+  const safeCostValue = isNaN(costValue) ? 0 : costValue;
+  const marketValue = Math.round(salesValue * weights.sales + safeCostValue * weights.cost);
 
   // --- Value Range: ±8% band (RBI allows ±10% for collateral) ---
   const valueRangeLow = Math.round(marketValue * 0.92);

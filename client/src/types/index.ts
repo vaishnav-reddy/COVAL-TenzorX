@@ -24,7 +24,7 @@ export interface PropertyInput {
   totalFloors?: number;
   amenities: string[];
   constructionQuality: ConstructionQuality;
-  declaredValue: number;
+  loanAmountRequired: number;
   purpose: Purpose;
   ownershipType?: OwnershipType;
   titleClarity?: TitleClarity;
@@ -79,6 +79,56 @@ export interface ValuationResult {
   auditTrail: AuditEntry[];
   processingTime: number;
   createdAt: string;
+  
+  // Problem Statement Required Outputs
+  infrastructureProximityIndex?: number;
+  infrastructureBreakdown?: Record<string, any>;
+  neighborhoodQualityScore?: number;
+  neighborhoodBreakdown?: Record<string, any>;
+  propertyConfiguration?: {
+    compliant: boolean;
+    score: number;
+    issues: any[];
+  };
+  compositeLocationScore?: number;
+  
+  // Market Activity Proxies (Problem Statement Requirement)
+  marketActivityProxies?: {
+    brokerDensity: number;
+    transactionIndicators: number;
+    listingDensity: number;
+    priceVelocity: number;
+  };
+  brokerDensity?: number;
+  transactionIndicators?: number;
+  listingDensity?: number;
+  
+  // Credit Scoring Outputs
+  creditScoring?: {
+    creditAnalysis: {
+      score: number;
+      category: string;
+      description: string;
+    };
+    ltvAdjustment: {
+      base: number;
+      adjusted: number;
+      adjustment: number;
+    };
+    riskAdjustment: {
+      totalAdjustment: number;
+    };
+    loanRecommendations: any[];
+    eligibilityScore: number;
+  };
+  adjustedLTV?: number;
+  creditRiskAdjustment?: number;
+  loanRecommendations?: any[];
+  
+  // Loan Amount (NEW)
+  loanAmountRequired?: number;
+  
+  // Enhanced Market Data
   marketData: MarketDataSummary;
   overCircleRatePercent: number;
   overPricedFlag: boolean;
@@ -116,4 +166,10 @@ export interface MarketDataSummary {
   circleRate: number;
   demandIndex: number;
   yoyAppreciation: number;
+  marketAbsorptionRate?: number;
+  connectivity?: number;
+  infrastructureScore?: number;
+  propertyCount?: number;
+  marketConfidence?: number;
+  dataSources?: Record<string, boolean>;
 }

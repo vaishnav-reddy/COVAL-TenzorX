@@ -8,6 +8,7 @@ import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import PropertyForm from './pages/PropertyForm';
+import RecordsDashboard from './pages/RecordsDashboard';
 import ValuationDashboard from './pages/ValuationDashboard';
 import FullReport from './pages/FullReport';
 import Dashboard from './pages/Dashboard';
@@ -35,7 +36,8 @@ export default function App() {
                 <Route index element={<Navigate to="/app/new-applicant" replace />} />
                 <Route path="new-applicant" element={<PropertyForm />} />
                 <Route path="dashboard" element={<Dashboard />} />
-                <Route path="dashboard/:id" element={<ValuationDashboard />} />
+                <Route path="/app/dashboard/:id" element={<ValuationDashboard />} />
+                <Route path="valuation/:id" element={<ValuationDashboard />} />
                 <Route path="report/:id" element={<FullReport />} />
                 <Route path="history" element={<AdminDashboard />} />
                 <Route path="land-ocr" element={<LandOCR />} />
